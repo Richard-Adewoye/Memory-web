@@ -459,16 +459,20 @@ Synaptic consolidation occurs predominantly during [Non-REM slow-wave sleep].
           </div>
 
           <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-            <button type="button" class="secondary-btn" id="btn-export-data">
+            <button type="button" class="secondary-btn" id="btn-export-csv" title="Export flashcards to CSV spreadsheet format for Anki, Excel, or Google Sheets">
+              📄 Export Flashcards (CSV)
+            </button>
+
+            <button type="button" class="secondary-btn" id="btn-export-data" title="Export entire application data (cards, logs, stats) as JSON">
               ⬇️ Export Backup (JSON)
             </button>
 
-            <button type="button" class="secondary-btn" id="btn-import-data">
+            <button type="button" class="secondary-btn" id="btn-import-data" title="Restore application state from JSON backup">
               ⬆️ Import Backup (JSON)
             </button>
             <input type="file" id="import-file-input" accept=".json" style="display: none;" />
 
-            <button type="button" class="secondary-btn" id="btn-reset-demo" style="color: var(--accent-danger);">
+            <button type="button" class="secondary-btn" id="btn-reset-demo" style="color: var(--accent-danger);" title="Reset to default learning science cards">
               🔄 Reset to Seed Data
             </button>
           </div>

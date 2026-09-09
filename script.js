@@ -1710,6 +1710,7 @@ Deliberate [active recall] stimulates neuroplasticity significantly more than pa
     }
 
     // Data Management Buttons
+    document.getElementById('btn-export-csv')?.addEventListener('click', exportCardsCsv);
     document.getElementById('btn-export-data')?.addEventListener('click', exportDataJson);
     document.getElementById('btn-import-data')?.addEventListener('click', () => {
       document.getElementById('import-file-input')?.click();
@@ -1850,6 +1851,67 @@ Deliberate [active recall] stimulates neuroplasticity significantly more than pa
   }
 
   // --- DATA EXPORT & IMPORT ---
+  function escapeCsvCell(val) {
+    if (val === null || val === undefined) return '""';
+    let str = String(val);
+    if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return `"${str}"`;
+  }
+
+  function exportCardsCsv() {
+    const cards = appState.cards || [];
+    if (cards.length === 0) {
+      showToast('No flashcards found to export.');
+      return;
+    }
+
+    const headers = [
+      'ID',
+      'Deck',
+      'Question_Front',
+      'Answer_Back',
+      'Notes',
+      'Tags',
+      'Interval_Days',
+      'Ease_Factor',
+      'Repetitions',
+      'Next_Review_Date',
+      'Last_Reviewed_Date'
+    ];
+
+    const rows = cards.map(c => [
+      escapeCsvCell(c.id),
+      escapeCsvCell(c.deck || 'General'),
+      escapeCsvCell(c.question || ''),
+      escapeCsvCell(c.answer || ''),
+      escapeCsvCell(c.notes || ''),
+      escapeCsvCell((c.tags || []).join('; ')),
+      escapeCsvCell(c.interval ?? 0),
+      escapeCsvCell(c.easeFactor ? Number(c.easeFactor).toFixed(2) : '2.50'),
+      escapeCsvCell(c.repetition ?? 0),
+      escapeCsvCell(c.nextReviewDate || ''),
+      escapeCsvCell(c.lastReviewedDate || '')
+    ].join(','));
+
+    // Prepend UTF-8 BOM (\uFEFF) for seamless compatibility across Excel, Google Sheets, Anki
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute('href', url);
+    dlAnchor.setAttribute('download', `flashcards_export_${getTodayDateString()}.csv`);
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    playSound('complete');
+    showToast(`Exported ${cards.length} flashcard${cards.length > 1 ? 's' : ''} to CSV file.`);
+  }
+
   function exportDataJson() {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appState, null, 2));
     const dlAnchor = document.createElement('a');
