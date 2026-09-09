@@ -800,8 +800,20 @@
     }).join('');
   }
 
+  function safeConfirm(message) {
+    try {
+      if (typeof window.confirm === 'function') {
+        return window.confirm(message);
+      }
+      return true;
+    } catch (e) {
+      console.warn('window.confirm blocked or restricted in current iframe sandbox:', e);
+      return true;
+    }
+  }
+
   window.deleteDailyLog = function(logId) {
-    if (!confirm('Are you sure you want to delete this daily learning entry? Linked flashcards will be preserved.')) return;
+    if (!safeConfirm('Are you sure you want to delete this daily learning entry? Linked flashcards will be preserved.')) return;
     appState.dailyLogs = appState.dailyLogs.filter(l => l.id !== logId);
     saveState();
     renderDailyLogsTimeline();
@@ -1197,14 +1209,16 @@ Deliberate [active recall] stimulates neuroplasticity significantly more than pa
     updateGlobalMetrics();
     checkScheduledReminder();
 
-    // Prompt user if cards are due today
+    // Prompt user if cards are due today using non-blocking interactive toast
     const dueCards = appState.cards.filter(c => c.nextReviewDate <= today);
     if (dueCards.length > 0 && scheduleMode === 'today') {
-      setTimeout(() => {
-        if (confirm(`You have ${dueCards.length} flashcard(s) due for spaced review today. Start your review session now?`)) {
-          switchTab('tab-review');
-        }
-      }, 400);
+      showToast(
+        `Imported ${totalImported} card${totalImported > 1 ? 's' : ''}! You have ${dueCards.length} card${dueCards.length > 1 ? 's' : ''} ready for review.`,
+        'Start Review Now →',
+        () => switchTab('tab-review')
+      );
+    } else {
+      showToast(`Successfully imported ${totalImported} card${totalImported > 1 ? 's' : ''} into "${deckName}"!`);
     }
   }
 
@@ -1514,7 +1528,7 @@ Deliberate [active recall] stimulates neuroplasticity significantly more than pa
   }
 
   window.deleteCard = function (cardId) {
-    if (!confirm('Are you sure you want to delete this flashcard?')) return;
+    if (!safeConfirm('Are you sure you want to delete this flashcard?')) return;
     appState.cards = appState.cards.filter(c => c.id !== cardId);
     saveState();
     renderLibrary();
@@ -1711,23 +1725,38 @@ Deliberate [active recall] stimulates neuroplasticity significantly more than pa
       return;
     }
 
-    Notification.requestPermission().then(permission => {
-      if (permission === 'granted') {
-        appState.settings.notificationsEnabled = true;
-        saveState();
-        updateNotificationStatusUI();
-        showToast('Browser notifications enabled! You will receive daily spaced review alerts.');
-        new Notification('🧠 MnemoLog Notifications Activated', {
-          body: 'We will remind you when flashcards are due to strengthen your memory retention.',
-          icon: '/favicon.ico'
+    try {
+      const p = Notification.requestPermission();
+      if (p && typeof p.then === 'function') {
+        p.then(permission => {
+          if (permission === 'granted') {
+            appState.settings.notificationsEnabled = true;
+            saveState();
+            updateNotificationStatusUI();
+            showToast('Browser notifications enabled! You will receive daily spaced review alerts.');
+            try {
+              new Notification('🧠 MnemoLog Notifications Activated', {
+                body: 'We will remind you when flashcards are due to strengthen your memory retention.',
+                icon: '/favicon.ico'
+              });
+            } catch (err) {
+              console.warn('System notification blocked:', err);
+            }
+          } else {
+            appState.settings.notificationsEnabled = false;
+            saveState();
+            updateNotificationStatusUI();
+            showToast('Notification permission was declined or dismissed.');
+          }
+        }).catch(err => {
+          console.warn('Notification permission promise rejected:', err);
+          showToast('Notification request was blocked by browser frame policy. In-app reminders remain active.');
         });
-      } else {
-        appState.settings.notificationsEnabled = false;
-        saveState();
-        updateNotificationStatusUI();
-        showToast('Notification permission was declined or dismissed.');
       }
-    });
+    } catch (err) {
+      console.warn('Notification permission error:', err);
+      showToast('Notification permission request is restricted in this environment.');
+    }
   }
 
   function updateNotificationStatusUI() {
@@ -1860,7 +1889,7 @@ Deliberate [active recall] stimulates neuroplasticity significantly more than pa
   }
 
   function resetDemoData() {
-    if (!confirm('Reset back to initial learning science sample data? Current cards and logs will be replaced.')) return;
+    if (!safeConfirm('Reset back to initial learning science sample data? Current cards and logs will be replaced.')) return;
     appState = JSON.parse(JSON.stringify(DEFAULT_DATA));
     appState.stats.lastActiveDate = getTodayDateString();
     saveState();
@@ -1903,21 +1932,39 @@ Deliberate [active recall] stimulates neuroplasticity significantly more than pa
     }
   }
 
-  function showToast(message) {
+  function showToast(message, actionLabel = null, onAction = null) {
     const container = document.getElementById('toast-container');
     if (!container) return;
 
     const toast = document.createElement('div');
     toast.className = 'toast';
-    toast.innerHTML = `<span>💡</span> <div>${escapeHtml(message)}</div>`;
+    
+    let contentHtml = `<span>💡</span> <div style="flex:1; line-height: 1.4;">${escapeHtml(message)}</div>`;
+    if (actionLabel && onAction) {
+      contentHtml += `<button type="button" class="toast-action-btn" style="background:var(--accent-primary);color:#fff;border:none;padding:0.3rem 0.65rem;border-radius:var(--radius-sm);font-size:0.78rem;font-weight:600;cursor:pointer;margin-left:0.5rem;white-space:nowrap;">${escapeHtml(actionLabel)}</button>`;
+    }
+    toast.innerHTML = contentHtml;
+
+    if (actionLabel && onAction) {
+      const btn = toast.querySelector('.toast-action-btn');
+      if (btn) {
+        btn.addEventListener('click', () => {
+          onAction();
+          toast.remove();
+        });
+      }
+    }
+
     container.appendChild(toast);
 
     setTimeout(() => {
-      toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-      toast.style.opacity = '0';
-      toast.style.transform = 'translateY(10px)';
-      setTimeout(() => toast.remove(), 300);
-    }, 4000);
+      if (toast.isConnected) {
+        toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+        setTimeout(() => toast.remove(), 300);
+      }
+    }, actionLabel ? 6500 : 4000);
   }
 
   function escapeHtml(str) {
