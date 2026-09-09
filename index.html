@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spaced Repetition &amp; Learning Retention Journal</title>
+    <meta name="description" content="Interactive flashcards powered by SM-2 spaced repetition with daily learning logs, review forecasts, and reminder alerts." />
+    <meta property="og:title" content="Spaced Repetition &amp; Learning Retention Journal" />
+    <meta property="og:description" content="Interactive flashcards powered by SM-2 spaced repetition with daily learning logs, review forecasts, and reminder alerts." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <!-- Top Spaced Repetition Reminder Alert Banner -->
+    <div id="top-reminder-banner" class="reminder-banner" style="display: none;">
+      <div class="reminder-banner-content">
+        <div class="reminder-text">
+          <span>⏰</span>
+          <span id="banner-reminder-text">You have cards scheduled for spaced repetition review today.</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <button type="button" id="banner-start-review-btn" class="reminder-action-btn">Review Now</button>
+          <button type="button" id="banner-dismiss-btn" class="reminder-close" title="Dismiss banner">&times;</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Application Sticky Header -->
+    <header class="app-header" id="main-header">
+      <div class="header-content">
+        <div class="brand-section">
+          <div class="brand-icon" id="brand-icon">🧠</div>
+          <div>
+            <h1 class="brand-title" id="app-title">MnemoLog</h1>
+            <p class="brand-subtitle">Spaced Repetition &amp; Daily Learning Journal</p>
+          </div>
+        </div>
+
+        <!-- Real-time metrics & controls -->
+        <div class="header-metrics">
+          <div class="metric-pill streak" id="header-streak-pill" title="Daily Learning Streak">
+            <span>🔥</span>
+            <span id="header-streak-count">3d Streak</span>
+          </div>
+
+          <div class="metric-pill due-badge" id="header-due-pill" title="Cards Due For Review">
+            <span>🎯</span>
+            <span id="header-due-count">0 Due</span>
+          </div>
+
+          <div class="metric-pill" id="header-reminder-pill" title="Notification Status">
+            <span>🔔</span>
+            <span>Alerts Off</span>
+          </div>
+
+          <button type="button" class="btn-icon" id="btn-toggle-sound" title="Toggle Sound Feedback">
+            🔊
+          </button>
+
+          <button type="button" class="btn-icon" id="btn-toggle-theme" title="Toggle Dark/Light Mode">
+            ☀️
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="app-container" id="main-container">
+      <!-- Tab Navigation -->
+      <nav class="nav-tabs" id="navigation-tabs" aria-label="Main Navigation">
+        <button type="button" class="tab-btn active" data-tab="tab-review" id="nav-btn-review">
+          <span>🎴</span>
+          <span>Review Due</span>
+          <span class="tab-badge" id="review-tab-badge">0</span>
+        </button>
+
+        <button type="button" class="tab-btn" data-tab="tab-daily" id="nav-btn-daily">
+          <span>📝</span>
+          <span>Daily Learning Log</span>
+        </button>
+
+        <button type="button" class="tab-btn" data-tab="tab-cards" id="nav-btn-cards">
+          <span>🗂️</span>
+          <span>Card Deck Library</span>
+        </button>
+
+        <button type="button" class="tab-btn" data-tab="tab-reminders" id="nav-btn-reminders">
+          <span>📈</span>
+          <span>Retention &amp; Reminders</span>
+        </button>
+      </nav>
+
+      <!-- ====================================================================
+           TAB 1: INTERACTIVE FLASHCARD REVIEW (SM-2 ALGORITHM)
+           ==================================================================== -->
+      <section class="tab-pane active" id="tab-review" aria-labelledby="nav-btn-review">
+        <div id="review-container">
+          <!-- Populated dynamically by script.js -->
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           TAB 2: DAILY LEARNING LOG & QUICK FLASHCARD GENERATOR
+           ==================================================================== -->
+      <section class="tab-pane" id="tab-daily" aria-labelledby="nav-btn-daily">
+        <div class="daily-log-layout">
+          <!-- Form to record today's learning -->
+          <div class="surface-panel" id="daily-log-panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title"><span>✍️</span> Record What You Learnt Today</h2>
+                <p class="panel-subtitle">Document key takeaways and convert them directly into active retention flashcards.</p>
+              </div>
+            </div>
+
+            <form id="daily-log-form">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="log-date-input" class="form-label">Date of Learning</label>
+                  <input type="date" id="log-date-input" class="form-input" required />
+                </div>
+
+                <div class="form-group">
+                  <label for="log-subject-input" class="form-label">Topic / Subject</label>
+                  <input type="text" id="log-subject-input" class="form-input" placeholder="e.g. Cognitive Psychology, Spanish, System Design" required />
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="log-title-input" class="form-label">Core Concept / Key Topic</label>
+                <input type="text" id="log-title-input" class="form-input" placeholder="e.g. Synaptic Consolidation during Non-REM Sleep" required />
+              </div>
+
+              <div class="form-group">
+                <label for="log-notes-input" class="form-label">Learnings, Notes &amp; Personal Takeaways</label>
+                <textarea id="log-notes-input" class="form-textarea" placeholder="Summarize what you understood in your own words. Why does this matter? What connects with your prior knowledge?" required></textarea>
+              </div>
+
+              <div class="form-group">
+                <label for="log-confidence-select" class="form-label">Understanding Level</label>
+                <select id="log-confidence-select" class="form-select">
+                  <option value="breakthrough">🌟 Breakthrough (Crystal clear &amp; deeply intuitive)</option>
+                  <option value="solid" selected>✅ Solid (Understood the core principles)</option>
+                  <option value="challenging">⚡ Challenging (Needs spaced review to solidify)</option>
+                </select>
+              </div>
+
+              <!-- Embedded Instant Flashcard Builder -->
+              <div class="quick-flashcard-box" id="quick-card-creator-box">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem;">
+                  <strong style="font-size: 0.88rem; color: #a5b4fc;">⚡ Convert into Spaced Flashcards</strong>
+                  <span style="font-size: 0.75rem; color: var(--text-muted);">Reinforce right away</span>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0.6rem;">
+                  <input type="text" id="quick-q-input" class="form-input" placeholder="Card Question / Prompt (e.g. What triggers synaptic pruning?)" />
+                </div>
+                <div class="form-group" style="margin-bottom: 0.6rem;">
+                  <textarea id="quick-a-input" class="form-textarea" style="min-height: 60px;" placeholder="Answer / Key Takeaway"></textarea>
+                </div>
+
+                <button type="button" id="btn-add-quick-card" class="secondary-btn" style="width: 100%; margin-bottom: 0.75rem;">
+                  + Add Card to This Daily Entry
+                </button>
+
+                <div id="temp-cards-list">
+                  <!-- Rendered dynamically -->
+                </div>
+              </div>
+
+              <div style="margin-top: 1.5rem;">
+                <button type="submit" id="btn-submit-daily-log" class="primary-btn" style="width: 100%;">
+                  💾 Save Daily Learning Log &amp; Generate Cards
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Timeline of Past Daily Logs -->
+          <div class="surface-panel" id="timeline-panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title"><span>📜</span> Learning Journal History</h2>
+                <p class="panel-subtitle">Your chronicle of daily recorded knowledge</p>
+              </div>
+            </div>
+
+            <div class="timeline-list" id="daily-logs-timeline">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           TAB 3: CARD DECK LIBRARY & MANAGEMENT
+           ==================================================================== -->
+      <section class="tab-pane" id="tab-cards" aria-labelledby="nav-btn-cards">
+        <div class="surface-panel">
+          <div class="library-toolbar">
+            <div class="search-filter-group">
+              <input type="search" id="library-search-input" class="form-input" style="max-width: 280px;" placeholder="🔍 Search flashcards..." />
+
+              <select id="library-status-select" class="form-select" style="max-width: 180px;">
+                <option value="all">All Cards</option>
+                <option value="due">Due for Review</option>
+                <option value="upcoming">Upcoming</option>
+                <option value="mastered">Mastered (Rep &ge; 4)</option>
+              </select>
+
+              <select id="library-deck-select" class="form-select" style="max-width: 180px;">
+                <option value="all">All Decks</option>
+              </select>
+            </div>
+
+            <button type="button" class="primary-btn" id="btn-open-new-card-modal">
+              + New Flashcard
+            </button>
+          </div>
+
+          <!-- Flashcard Grid -->
+          <div class="card-grid" id="card-library-grid">
+            <!-- Cards rendered dynamically -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           TAB 4: RETENTION SCHEDULE, METRICS & REMINDERS
+           ==================================================================== -->
+      <section class="tab-pane" id="tab-reminders" aria-labelledby="nav-btn-reminders">
+        <!-- Spaced Repetition Science & Key Metrics -->
+        <div class="retention-grid">
+          <div class="metric-card" id="metric-card-total">
+            <span class="metric-card-label">Total Flashcards</span>
+            <span class="metric-card-value" id="stat-total-cards">0</span>
+            <span class="metric-card-desc">Active knowledge nodes in memory</span>
+          </div>
+
+          <div class="metric-card" id="metric-card-due">
+            <span class="metric-card-label">Due Today</span>
+            <span class="metric-card-value" id="stat-due-cards" style="color: var(--accent-danger);">0</span>
+            <span class="metric-card-desc">Ready for spaced reinforcement</span>
+          </div>
+
+          <div class="metric-card" id="metric-card-mastered">
+            <span class="metric-card-label">Consolidated (Mastered)</span>
+            <span class="metric-card-value" id="stat-mastered-cards" style="color: var(--accent-success);">0</span>
+            <span class="metric-card-desc">Reached long-term retention tiers</span>
+          </div>
+
+          <div class="metric-card" id="metric-card-ease">
+            <span class="metric-card-label">Average Ease Factor</span>
+            <span class="metric-card-value" id="stat-avg-ease" style="color: var(--accent-info);">2.50</span>
+            <span class="metric-card-desc">SM-2 difficulty multiplier (Standard: 2.5)</span>
+          </div>
+        </div>
+
+        <!-- Visual Spaced Repetition Retention Forecast -->
+        <div class="surface-panel" id="forecast-panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title"><span>📅</span> Spaced Repetition Schedule Forecast</h2>
+              <p class="panel-subtitle">Predicted review loads across the forgetting curve</p>
+            </div>
+          </div>
+
+          <div class="forecast-container" id="retention-forecast-slots">
+            <!-- Slots rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- Reminder Preferences Panel -->
+        <div class="surface-panel" id="reminders-panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title"><span>🔔</span> Spaced Repetition Reminders &amp; Alerts</h2>
+              <p class="panel-subtitle">Configure alerts so you never miss an optimal retention window.</p>
+            </div>
+          </div>
+
+          <div class="reminder-config-box">
+            <div class="reminder-row">
+              <div class="reminder-info">
+                <h4>Browser System Notifications</h4>
+                <p>Receive desktop or mobile notifications when cards are due for spaced review.</p>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span id="notification-status-badge" style="font-size: 0.85rem; font-weight: 600;">Disabled</span>
+                <button type="button" class="primary-btn" id="btn-toggle-notifications">Enable Browser Alerts</button>
+              </div>
+            </div>
+
+            <div class="reminder-row">
+              <div class="reminder-info">
+                <h4>Daily Reminder Time</h4>
+                <p>What time of day do you prefer to complete your daily retention reviews?</p>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <input type="time" id="reminder-time-input" class="form-input" style="width: 140px;" value="19:00" />
+              </div>
+            </div>
+
+            <div class="reminder-row">
+              <div class="reminder-info">
+                <h4>Instant Test Reminder</h4>
+                <p>Send an immediate test alert to verify notification sound and browser delivery.</p>
+              </div>
+              <div>
+                <button type="button" class="secondary-btn" id="btn-test-notification">🔔 Test Alert Now</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Data Backup & Reset -->
+        <div class="surface-panel" id="backup-panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title"><span>💾</span> Backup, Export &amp; Reset</h2>
+              <p class="panel-subtitle">Safeguard your memory collection or restore learning science seed data</p>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+            <button type="button" class="secondary-btn" id="btn-export-data">
+              ⬇️ Export Backup (JSON)
+            </button>
+
+            <button type="button" class="secondary-btn" id="btn-import-data">
+              ⬆️ Import Backup (JSON)
+            </button>
+            <input type="file" id="import-file-input" accept=".json" style="display: none;" />
+
+            <button type="button" class="secondary-btn" id="btn-reset-demo" style="color: var(--accent-danger);">
+              🔄 Reset to Seed Data
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Create / Edit Card Modal Dialog -->
+    <div class="modal-overlay" id="card-modal" role="dialog" aria-modal="true" aria-labelledby="modal-card-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 class="modal-title" id="modal-card-title">Create Flashcard</h3>
+          <button type="button" class="btn-icon" id="modal-close-btn" aria-label="Close modal">&times;</button>
+        </div>
+
+        <form id="card-modal-form">
+          <div class="form-group">
+            <label for="modal-card-deck" class="form-label">Deck / Subject</label>
+            <input type="text" id="modal-card-deck" class="form-input" list="deck-datalist" placeholder="e.g. Cognitive Science, Spanish" required />
+            <datalist id="deck-datalist"></datalist>
+          </div>
+
+          <div class="form-group">
+            <label for="modal-card-question" class="form-label">Front (Question or Prompt)</label>
+            <textarea id="modal-card-question" class="form-textarea" style="min-height: 80px;" placeholder="What do you want to recall?" required></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="modal-card-answer" class="form-label">Back (Answer / Key Insight)</label>
+            <textarea id="modal-card-answer" class="form-textarea" style="min-height: 100px;" placeholder="The correct answer or concept..." required></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="modal-card-notes" class="form-label">Extra Notes / Context (Optional)</label>
+            <input type="text" id="modal-card-notes" class="form-input" placeholder="e.g. Discovered by Hermann Ebbinghaus in 1885" />
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="secondary-btn" id="modal-cancel-btn">Cancel</button>
+            <button type="submit" class="primary-btn" id="modal-save-btn">Save Flashcard</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+    <!-- Direct linking as required by instructions -->
+    <script src="script.js"></script>
+  </body>
+</html>
