@@ -1,6 +1,6 @@
 {
   "name": "Spaced Repetition & Learning Retention Journal",
-  "description": "Interactive flashcards powered by SM-2 spaced repetition with daily learning logs, review forecasts, and reminder alerts.",
+  "description": "Interactive flashcards powered by SM-2 spaced repetition with daily learning logs, notebook pasting for memory work, review forecasts, and reminder alerts.",
   "requestFramePermissions": ["notifications"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Spaced Repetition &amp; Learning Retention Journal</title>
-    <meta name="description" content="Interactive flashcards powered by SM-2 spaced repetition with daily learning logs, review forecasts, and reminder alerts." />
+    <meta name="description" content="Interactive flashcards powered by SM-2 spaced repetition with daily learning logs, notebook pasting for memory work, review forecasts, and reminder alerts." />
     <meta property="og:title" content="Spaced Repetition &amp; Learning Retention Journal" />
-    <meta property="og:description" content="Interactive flashcards powered by SM-2 spaced repetition with daily learning logs, review forecasts, and reminder alerts." />
+    <meta property="og:description" content="Interactive flashcards powered by SM-2 spaced repetition with daily learning logs, notebook pasting for memory work, review forecasts, and reminder alerts." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="stylesheet" href="styles.css">
@@ -80,6 +80,12 @@
           <span>Daily Learning Log</span>
         </button>
 
+        <button type="button" class="tab-btn" data-tab="tab-notebook" id="nav-btn-notebook">
+          <span>📓</span>
+          <span>Paste Notebook</span>
+          <span class="tab-badge" id="notebook-parsed-badge" style="display: none; background: rgba(99, 102, 241, 0.25); color: var(--accent-primary);">0</span>
+        </button>
+
         <button type="button" class="tab-btn" data-tab="tab-cards" id="nav-btn-cards">
           <span>🗂️</span>
           <span>Card Deck Library</span>
@@ -112,6 +118,9 @@
                 <h2 class="panel-title"><span>✍️</span> Record What You Learnt Today</h2>
                 <p class="panel-subtitle">Document key takeaways and convert them directly into active retention flashcards.</p>
               </div>
+              <button type="button" class="secondary-btn" id="btn-daily-to-notebook" title="Open notebook importer to paste notes directly">
+                <span>📓</span> Paste from Notebook
+              </button>
             </div>
 
             <form id="daily-log-form">
@@ -194,7 +203,128 @@
       </section>
 
       <!-- ====================================================================
-           TAB 3: CARD DECK LIBRARY & MANAGEMENT
+           TAB 3: PASTE FROM NOTEBOOK FOR MEMORY WORK (SPACED REPETITION)
+           ==================================================================== -->
+      <section class="tab-pane" id="tab-notebook" aria-labelledby="nav-btn-notebook">
+        <div class="notebook-layout">
+          <!-- Left Column: Notebook Text Input & Settings -->
+          <div class="surface-panel" id="notebook-input-panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title"><span>📓</span> Paste from Notebook for Memory Work</h2>
+                <p class="panel-subtitle">Paste raw notes from your notebook, lecture slides, or journal to convert them into spaced repetition flashcards.</p>
+              </div>
+            </div>
+
+            <!-- Quick Template & Format Selector -->
+            <div class="notebook-formats-card">
+              <div class="formats-header">
+                <span class="formats-label">⚡ Click to load sample notebook formats:</span>
+                <div class="template-buttons">
+                  <button type="button" class="sample-tag-btn" data-template="qa" id="btn-sample-qa">Q&amp;A Notes</button>
+                  <button type="button" class="sample-tag-btn" data-template="terms" id="btn-sample-terms">Terms (:: or -)</button>
+                  <button type="button" class="sample-tag-btn" data-template="cloze" id="btn-sample-cloze">Cloze [Fill-Blank]</button>
+                  <button type="button" class="sample-tag-btn" data-template="bullets" id="btn-sample-bullets">Bullet Takeaways</button>
+                </div>
+              </div>
+              <div class="formats-help-text" id="formats-help-desc">
+                Supports: <strong>Q: Question / A: Answer</strong>, <strong>Term :: Definition</strong>, <strong>Term - Definition</strong>, <strong>[cloze brackets]</strong>, and <strong>- bullet points</strong>.
+              </div>
+            </div>
+
+            <!-- Editor Wrapper -->
+            <div class="notebook-editor-wrapper">
+              <div class="editor-subtoolbar">
+                <span class="editor-label">Notebook Text</span>
+                <div class="editor-actions">
+                  <button type="button" class="tiny-btn" id="btn-paste-clipboard" title="Paste from clipboard">
+                    <span>📋</span> Paste Clipboard
+                  </button>
+                  <button type="button" class="tiny-btn" id="btn-clear-notebook" title="Clear notebook text">
+                    <span>🧹</span> Clear
+                  </button>
+                </div>
+              </div>
+
+              <textarea id="notebook-raw-input" class="form-textarea notebook-textarea" rows="12" placeholder="Paste your notebook text here... 
+
+Example formats:
+Q: What is the spacing effect in cognitive psychology?
+A: The psychological finding that learning is greater when studying is spread out over time rather than in a single cram session.
+
+Neuroplasticity :: The brain's ability to reorganize itself by forming new neural connections throughout life.
+
+Synaptic consolidation occurs predominantly during [Non-REM slow-wave sleep].
+
+- Retrieval practice enhances long-term memory far more than passive rereading."></textarea>
+            </div>
+
+            <!-- Config Grid -->
+            <div class="notebook-options-grid">
+              <div class="form-group" style="margin-bottom: 0.85rem;">
+                <label for="notebook-deck-input" class="form-label">Target Deck Name</label>
+                <input type="text" id="notebook-deck-input" class="form-input" list="notebook-deck-suggestions" placeholder="e.g. Cognitive Psychology" value="Notebook Memory Work" />
+                <datalist id="notebook-deck-suggestions"></datalist>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0.85rem;">
+                <label for="notebook-schedule-mode" class="form-label">Spaced Repetition Schedule</label>
+                <select id="notebook-schedule-mode" class="form-select">
+                  <option value="today" selected>Start Review Today (Due immediately)</option>
+                  <option value="stagger">Stagger Over Days (Avoid review cramming)</option>
+                  <option value="tomorrow">Start Tomorrow (+1 Day rest)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Daily Journal Log Option -->
+            <div class="form-group" style="margin-bottom: 0.85rem;">
+              <label class="checkbox-label" for="notebook-log-daily-check">
+                <input type="checkbox" id="notebook-log-daily-check" checked />
+                <span>Also record this notebook entry in your <strong>Daily Learning Log</strong></span>
+              </label>
+            </div>
+
+            <div class="form-group" id="notebook-log-title-group" style="margin-bottom: 1.25rem;">
+              <label for="notebook-log-title-input" class="form-label">Daily Log Title / Focus</label>
+              <input type="text" id="notebook-log-title-input" class="form-input" placeholder="e.g. Notebook Session: Memory Consolidation" />
+            </div>
+
+            <!-- Actions Bar -->
+            <div class="notebook-parse-bar">
+              <div class="parsed-counter" id="parsed-counter-badge">
+                <span class="count-number" id="parsed-card-count">0</span>
+                <span id="parsed-card-count-text">cards detected ready for review</span>
+              </div>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button type="button" class="primary-btn" id="btn-import-notebook-cards" disabled>
+                  <span>📥</span> Import to Spaced Repetition Queue
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Interactive Parsed Cards List & Refinement -->
+          <div class="surface-panel" id="notebook-preview-panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title"><span>👀</span> Parsed Flashcards Preview</h2>
+                <p class="panel-subtitle">Review, edit prompt/answers, or discard cards before adding to your spaced repetition algorithm.</p>
+              </div>
+              <button type="button" class="tiny-btn" id="btn-add-preview-card" title="Add another manual card to this batch">
+                + Add Card
+              </button>
+            </div>
+
+            <div class="parsed-cards-container" id="parsed-cards-list">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           TAB 4: CARD DECK LIBRARY & MANAGEMENT
            ==================================================================== -->
       <section class="tab-pane" id="tab-cards" aria-labelledby="nav-btn-cards">
         <div class="surface-panel">
@@ -214,9 +344,14 @@
               </select>
             </div>
 
-            <button type="button" class="primary-btn" id="btn-open-new-card-modal">
-              + New Flashcard
-            </button>
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+              <button type="button" class="secondary-btn" id="btn-library-to-notebook" title="Open notebook importer">
+                <span>📓</span> Paste Notebook
+              </button>
+              <button type="button" class="primary-btn" id="btn-open-new-card-modal">
+                + New Flashcard
+              </button>
+            </div>
           </div>
 
           <!-- Flashcard Grid -->
@@ -227,7 +362,7 @@
       </section>
 
       <!-- ====================================================================
-           TAB 4: RETENTION SCHEDULE, METRICS & REMINDERS
+           TAB 5: RETENTION SCHEDULE, METRICS & REMINDERS
            ==================================================================== -->
       <section class="tab-pane" id="tab-reminders" aria-labelledby="nav-btn-reminders">
         <!-- Spaced Repetition Science & Key Metrics -->

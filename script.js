@@ -808,7 +808,503 @@
     showToast('Daily learning entry removed.');
   };
 
-  // --- TAB 3: CARD LIBRARY & DECKS ---
+  // --- TAB 3: PASTE FROM NOTEBOOK FOR MEMORY WORK ---
+  let parsedNotebookCards = [];
+
+  const SAMPLE_NOTEBOOK_TEMPLATES = {
+    qa: `Q: What is the spacing effect in cognitive psychology?
+A: The psychological finding that learning is greater when study sessions are spaced out over time rather than in a single cram session.
+
+Q: How does the SM-2 spaced repetition algorithm calculate review intervals?
+A: It adjusts review intervals based on an Ease Factor (EF) and feedback rating (Again, Hard, Good, Easy), resetting on failure and expanding exponentially on success.
+
+Q: What is active recall and why is it superior to passive rereading?
+A: Active recall forces deliberate neural retrieval, which triggers synaptic consolidation and reveals gaps in comprehension far more effectively.
+
+Q: What role does Non-REM deep sleep play in memory consolidation?
+A: During slow-wave sleep, memories are replayed and transferred from the temporary hippocampus to the long-term neocortex.`,
+
+    terms: `Neuroplasticity :: The brain's ability to reorganize itself by forming new neural connections throughout life in response to learning or experience.
+Long-Term Potentiation (LTP) :: Persistent strengthening of synapses based on recent patterns of activity, considered the primary cellular mechanism of memory.
+Ebbinghaus Forgetting Curve - Mathematical model showing that without reinforcement, approximately 70% of new information is forgotten within 48 hours.
+Episodic Memory: Memory of autobiographical events (times, places, contextual emotions) that can be explicitly recalled.
+Working Memory: Temporary, limited-capacity cognitive system responsible for holding and manipulating information for immediate tasks.
+Synaptic Consolidation: The biological process that stabilizes a memory trace after the initial acquisition, taking hours to days.`,
+
+    cloze: `The [hippocampus] is essential for consolidating memories from short-term to long-term storage in the neocortex.
+Synaptic consolidation occurs predominantly during [Non-REM slow-wave sleep].
+Memory retention decays rapidly along the [Ebbinghaus forgetting curve] unless reinforced with spaced repetition.
+The SM-2 algorithm uses an [Ease Factor] starting at 2.5 to scale review intervals exponentially.
+Deliberate [active recall] stimulates neuroplasticity significantly more than passive highlighting or rereading.`,
+
+    bullets: `- Active recall forces the brain to retrieve information, strengthening synaptic pathways and retention.
+- Hermann Ebbinghaus discovered that over 70% of new information is forgotten within 48 hours without spaced review.
+- Interleaving different subjects during study improves cognitive discrimination and problem-solving skills compared to blocked repetition.
+- Sleep is essential for memory consolidation, specifically transferring labile memory traces into stable neural schemas.
+- Testing yourself with flashcards acts as an active retrieval cue, halting the exponential forgetting curve.`
+  };
+
+  function parseNotebookText(text) {
+    if (!text || !text.trim()) return [];
+    const results = [];
+    const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    // Strategy 1: Explicit Q&A blocks (e.g. Q: ... \n A: ...)
+    const qaRegex = /(?:^|\n)(?:Q|Question|Prompt|\d+[\.\)]\s*(?:Q|Question)?)\s*:\s*([^\n]+(?:\n(?!(?:A|Answer|Response)\s*:)[^\n]+)*)\n(?:A|Answer|Response)\s*:\s*([^\n]+(?:\n(?!(?:Q|Question|Prompt|\d+[\.\)]\s*(?:Q|Question)?)\s*:)[^\n]+)*)/gi;
+    let qaMatch;
+    while ((qaMatch = qaRegex.exec(normalized)) !== null) {
+      const question = qaMatch[1].trim();
+      const answer = qaMatch[2].trim();
+      if (question && answer) {
+        results.push({
+          type: 'qa',
+          typeLabel: 'Q&A',
+          question: question,
+          answer: answer
+        });
+      }
+    }
+
+    // Line by line scanning for alternative notebook formats
+    const lines = normalized.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].trim();
+      if (!line) continue;
+
+      // Skip lines already part of explicit Q&A tags
+      if (/^(?:Q|Question|Prompt|\d+[\.\)]\s*Q):\s*/i.test(line) || /^(?:A|Answer|Response):\s*/i.test(line)) {
+        continue;
+      }
+
+      // Format 2: Cloze Deletion brackets [cloze text] or {{cloze text}}
+      const clozeMatch = line.match(/\[([^\]]+)\]/) || line.match(/\{\{([^}]+)\}\}/);
+      if (clozeMatch) {
+        const answerTerm = clozeMatch[1].trim();
+        const prompt = line.replace(/\[([^\]]+)\]/, '[ ... ]')
+          .replace(/\{\{([^}]+)\}\}/, '[ ... ]')
+          .replace(/^[-*•\d\.]+\s*/, '');
+        
+        results.push({
+          type: 'cloze',
+          typeLabel: 'Cloze',
+          question: prompt,
+          answer: `${answerTerm}\n\nFull Note:\n${line.replace(/^[-*•\d\.]+\s*/, '')}`
+        });
+        continue;
+      }
+
+      // Format 3: Double or Triple Colons (Obsidian/RemNote style :: or :::)
+      if (line.includes(':::') || line.includes('::')) {
+        const parts = line.split(/::+/);
+        if (parts.length >= 2) {
+          const front = parts[0].replace(/^[-*•\d\.]+\s*/, '').trim();
+          const back = parts.slice(1).join('::').trim();
+          if (front && back) {
+            results.push({
+              type: 'terms',
+              typeLabel: 'Term',
+              question: front,
+              answer: back
+            });
+            continue;
+          }
+        }
+      }
+
+      // Format 4: Tab-separated (TSV from spreadsheet or table)
+      if (line.includes('\t')) {
+        const parts = line.split('\t');
+        if (parts.length >= 2 && parts[0].trim() && parts[1].trim()) {
+          results.push({
+            type: 'terms',
+            typeLabel: 'Table',
+            question: parts[0].trim(),
+            answer: parts.slice(1).join(' - ').trim()
+          });
+          continue;
+        }
+      }
+
+      // Format 5: Hyphen / Dash / Em-dash Separators: " - ", " – ", " — "
+      let cleanLine = line.replace(/^[-*•]\s+/, '');
+      const dashMatch = cleanLine.match(/^([^\-\–\—\n]+?)\s*[\-\–\—]\s+(.+)$/);
+      if (dashMatch) {
+        const term = dashMatch[1].replace(/^\d+[\.\)]\s*/, '').trim();
+        const def = dashMatch[2].trim();
+        if (term.length > 0 && term.length <= 90 && def.length > 0) {
+          results.push({
+            type: 'terms',
+            typeLabel: 'Definition',
+            question: term,
+            answer: def
+          });
+          continue;
+        }
+      }
+
+      // Format 6: Colon Separator "Term: Definition"
+      const colonMatch = cleanLine.match(/^([A-Za-z0-9\s\(\)\/]{2,75}):\s+(.+)$/);
+      if (colonMatch) {
+        const term = colonMatch[1].replace(/^\d+[\.\)]\s*/, '').trim();
+        const def = colonMatch[2].trim();
+        if (term && def && !term.toLowerCase().startsWith('http')) {
+          results.push({
+            type: 'terms',
+            typeLabel: 'Term',
+            question: term,
+            answer: def
+          });
+          continue;
+        }
+      }
+
+      // Format 7: Numbered or Bullet Takeaways
+      if (/^[-*•]\s+/.test(line) || /^\d+[\.\)]\s+/.test(line)) {
+        const content = line.replace(/^[-*•\d\.]+\s*/, '').trim();
+        if (content.length > 15) {
+          const words = content.split(' ');
+          let promptTitle = 'Key Takeaway / Principle:';
+          if (words.length > 5) {
+            promptTitle = `Recall the concept: "${words.slice(0, 4).join(' ')}..."`;
+          }
+          results.push({
+            type: 'bullets',
+            typeLabel: 'Bullet',
+            question: promptTitle,
+            answer: content
+          });
+          continue;
+        }
+      }
+
+      // Format 8: Paragraph block with question ending with "?"
+      if (line.endsWith('?') && i + 1 < lines.length && lines[i + 1].trim()) {
+        const q = line.replace(/^[-*•\d\.]+\s*/, '').trim();
+        const a = lines[i + 1].trim();
+        results.push({
+          type: 'qa',
+          typeLabel: 'Q&A',
+          question: q,
+          answer: a
+        });
+        i++; // skip consumed answer line
+        continue;
+      }
+    }
+
+    return results;
+  }
+
+  function renderParsedCardsPreview() {
+    const listEl = document.getElementById('parsed-cards-list');
+    const countBadge = document.getElementById('parsed-card-count');
+    const countText = document.getElementById('parsed-card-count-text');
+    const importBtn = document.getElementById('btn-import-notebook-cards');
+    const tabBadge = document.getElementById('notebook-parsed-badge');
+
+    if (!listEl) return;
+
+    const count = parsedNotebookCards.length;
+    if (countBadge) countBadge.textContent = count;
+    if (countText) countText.textContent = count === 1 ? 'card detected ready for review' : 'cards detected ready for review';
+    if (importBtn) {
+      importBtn.disabled = count === 0;
+      importBtn.innerHTML = count > 0 
+        ? `<span>📥</span> Import ${count} Card${count > 1 ? 's' : ''} into Spaced Repetition` 
+        : `<span>📥</span> Import to Spaced Repetition Queue`;
+    }
+
+    if (tabBadge) {
+      if (count > 0) {
+        tabBadge.textContent = count;
+        tabBadge.style.display = 'inline-flex';
+      } else {
+        tabBadge.style.display = 'none';
+      }
+    }
+
+    if (count === 0) {
+      listEl.innerHTML = `
+        <div class="empty-parse-state">
+          <span style="font-size: 2.25rem;">📝</span>
+          <p style="margin-top: 0.6rem; color: var(--text-muted); font-size: 0.9rem; max-width: 380px; margin-left: auto; margin-right: auto;">
+            Paste your notebook text on the left, or click one of the sample formats above to preview automatically generated memory flashcards.
+          </p>
+        </div>
+      `;
+      return;
+    }
+
+    listEl.innerHTML = parsedNotebookCards.map((card, idx) => {
+      let tagClass = '';
+      if (card.type === 'cloze') tagClass = 'cloze';
+      else if (card.type === 'terms') tagClass = 'terms';
+
+      return `
+        <div class="parsed-card-item" data-index="${idx}">
+          <div class="parsed-card-header">
+            <div class="parsed-card-meta">
+              <span class="parsed-card-index">#${idx + 1}</span>
+              <span class="parsed-card-type-tag ${tagClass}">${escapeHtml(card.typeLabel || 'CARD')}</span>
+            </div>
+            <button type="button" class="parsed-card-delete-btn" data-index="${idx}" title="Discard this card">&times; Remove</button>
+          </div>
+          <div class="parsed-card-fields">
+            <div class="parsed-field-row">
+              <label class="parsed-field-label">Front (Question / Prompt)</label>
+              <textarea class="parsed-field-input card-field-q" rows="2" data-index="${idx}">${escapeHtml(card.question)}</textarea>
+            </div>
+            <div class="parsed-field-row">
+              <label class="parsed-field-label">Back (Answer / Recall Target)</label>
+              <textarea class="parsed-field-input card-field-a" rows="2" data-index="${idx}">${escapeHtml(card.answer)}</textarea>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Attach real-time input change handlers so edits persist in parsedNotebookCards
+    listEl.querySelectorAll('.card-field-q').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.index, 10);
+        if (parsedNotebookCards[idx]) {
+          parsedNotebookCards[idx].question = e.target.value;
+        }
+      });
+    });
+
+    listEl.querySelectorAll('.card-field-a').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.index, 10);
+        if (parsedNotebookCards[idx]) {
+          parsedNotebookCards[idx].answer = e.target.value;
+        }
+      });
+    });
+
+    listEl.querySelectorAll('.parsed-card-delete-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(e.currentTarget.dataset.index, 10);
+        parsedNotebookCards.splice(idx, 1);
+        renderParsedCardsPreview();
+      });
+    });
+  }
+
+  function updateNotebookDeckSuggestions() {
+    const datalist = document.getElementById('notebook-deck-suggestions');
+    if (!datalist) return;
+    const decks = [...new Set(appState.cards.map(c => c.deck || 'General'))].filter(Boolean);
+    datalist.innerHTML = decks.map(d => `<option value="${escapeHtml(d)}">`).join('');
+  }
+
+  function importNotebookCards() {
+    if (parsedNotebookCards.length === 0) {
+      showToast('No parsed cards to import. Paste notebook text first.');
+      return;
+    }
+
+    const deckInput = document.getElementById('notebook-deck-input');
+    const deckName = (deckInput && deckInput.value.trim()) || 'Notebook Memory Work';
+
+    const scheduleMode = document.getElementById('notebook-schedule-mode')?.value || 'today';
+    const logDailyCheck = document.getElementById('notebook-log-daily-check')?.checked;
+    const logTitleInput = document.getElementById('notebook-log-title-input');
+    const rawTextInput = document.getElementById('notebook-raw-input');
+    const rawText = (rawTextInput && rawTextInput.value.trim()) || '';
+
+    const today = getTodayDateString();
+    const createdCardIds = [];
+    const logId = 'log_' + Date.now();
+
+    parsedNotebookCards.forEach((card, idx) => {
+      const q = (card.question || '').trim();
+      const a = (card.answer || '').trim();
+      if (!q || !a) return;
+
+      const cardId = 'card_nb_' + Date.now() + '_' + idx;
+      createdCardIds.push(cardId);
+
+      let nextReviewDate = today;
+      let interval = 0;
+
+      if (scheduleMode === 'stagger') {
+        const staggerOffset = idx % 4; // Spread across today, +1, +2, +3 days
+        nextReviewDate = addDays(today, staggerOffset);
+        interval = staggerOffset;
+      } else if (scheduleMode === 'tomorrow') {
+        nextReviewDate = addDays(today, 1);
+        interval = 1;
+      } else {
+        nextReviewDate = today;
+        interval = 0;
+      }
+
+      appState.cards.push({
+        id: cardId,
+        question: q,
+        answer: a,
+        notes: `Imported from notebook: ${deckName}`,
+        deck: deckName,
+        tags: ['notebook', deckName.toLowerCase().replace(/\s+/g, '-')],
+        dailyLogId: logDailyCheck ? logId : null,
+        repetition: 0,
+        interval: interval,
+        easeFactor: 2.5,
+        nextReviewDate: nextReviewDate,
+        lastReviewedDate: null,
+        history: []
+      });
+    });
+
+    if (createdCardIds.length === 0) {
+      showToast('No valid flashcards found with both questions and answers.');
+      return;
+    }
+
+    // Optional: Log to Daily Learning Journal
+    if (logDailyCheck) {
+      const logTitle = (logTitleInput && logTitleInput.value.trim()) || `Notebook Study: ${deckName}`;
+      const newLog = {
+        id: logId,
+        date: today,
+        subject: deckName,
+        title: logTitle,
+        notes: rawText || `Imported ${createdCardIds.length} flashcard(s) from notebook for spaced repetition memory work.`,
+        confidence: 'solid',
+        cardIds: createdCardIds,
+        createdAt: new Date().toISOString()
+      };
+      appState.dailyLogs.unshift(newLog);
+      updateStreak();
+    }
+
+    saveState();
+    playSound('complete');
+
+    const totalImported = createdCardIds.length;
+    showToast(`Successfully imported ${totalImported} card${totalImported > 1 ? 's' : ''} into "${deckName}"!`);
+
+    // Reset notebook inputs
+    if (rawTextInput) rawTextInput.value = '';
+    parsedNotebookCards = [];
+    renderParsedCardsPreview();
+
+    // Re-render UI components
+    renderDailyLogsTimeline();
+    renderLibrary();
+    renderRetentionSchedule();
+    updateGlobalMetrics();
+    checkScheduledReminder();
+
+    // Prompt user if cards are due today
+    const dueCards = appState.cards.filter(c => c.nextReviewDate <= today);
+    if (dueCards.length > 0 && scheduleMode === 'today') {
+      setTimeout(() => {
+        if (confirm(`You have ${dueCards.length} flashcard(s) due for spaced review today. Start your review session now?`)) {
+          switchTab('tab-review');
+        }
+      }, 400);
+    }
+  }
+
+  function initNotebookImporter() {
+    updateNotebookDeckSuggestions();
+
+    const rawInput = document.getElementById('notebook-raw-input');
+    if (rawInput) {
+      rawInput.addEventListener('input', () => {
+        parsedNotebookCards = parseNotebookText(rawInput.value);
+        renderParsedCardsPreview();
+      });
+    }
+
+    // Template sample buttons
+    document.querySelectorAll('.sample-tag-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const templateKey = btn.dataset.template;
+        if (SAMPLE_NOTEBOOK_TEMPLATES[templateKey]) {
+          if (rawInput) {
+            rawInput.value = SAMPLE_NOTEBOOK_TEMPLATES[templateKey];
+            parsedNotebookCards = parseNotebookText(rawInput.value);
+            renderParsedCardsPreview();
+            showToast(`Loaded ${btn.textContent.trim()} notebook sample.`);
+          }
+        }
+      });
+    });
+
+    // Paste from clipboard button
+    const pasteBtn = document.getElementById('btn-paste-clipboard');
+    if (pasteBtn) {
+      pasteBtn.addEventListener('click', async () => {
+        try {
+          if (navigator.clipboard && navigator.clipboard.readText) {
+            const text = await navigator.clipboard.readText();
+            if (text) {
+              if (rawInput) {
+                rawInput.value = text;
+                parsedNotebookCards = parseNotebookText(text);
+                renderParsedCardsPreview();
+                showToast('Pasted notebook text from clipboard!');
+              }
+            } else {
+              showToast('Clipboard is empty.');
+            }
+          } else {
+            showToast('Clipboard access not permitted in this browser mode. Press Ctrl+V / Cmd+V in the text box.');
+          }
+        } catch (err) {
+          showToast('Please paste directly using Ctrl+V or Cmd+V in the text area.');
+        }
+      });
+    }
+
+    // Clear notebook button
+    const clearBtn = document.getElementById('btn-clear-notebook');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        if (rawInput) rawInput.value = '';
+        parsedNotebookCards = [];
+        renderParsedCardsPreview();
+        showToast('Notebook input cleared.');
+      });
+    }
+
+    // Add manual custom card to preview batch
+    const addCardBtn = document.getElementById('btn-add-preview-card');
+    if (addCardBtn) {
+      addCardBtn.addEventListener('click', () => {
+        parsedNotebookCards.push({
+          type: 'custom',
+          typeLabel: 'Custom',
+          question: 'New Question / Concept',
+          answer: 'Target Answer / Explanation'
+        });
+        renderParsedCardsPreview();
+        const listEl = document.getElementById('parsed-cards-list');
+        if (listEl) {
+          setTimeout(() => {
+            listEl.scrollTop = listEl.scrollHeight;
+            const inputs = listEl.querySelectorAll('.card-field-q');
+            if (inputs.length > 0) inputs[inputs.length - 1].focus();
+          }, 50);
+        }
+      });
+    }
+
+    // Import action button
+    const importBtn = document.getElementById('btn-import-notebook-cards');
+    if (importBtn) {
+      importBtn.addEventListener('click', () => {
+        importNotebookCards();
+      });
+    }
+
+    renderParsedCardsPreview();
+  }
+
+  // --- TAB 4: CARD LIBRARY & DECKS ---
   let librarySearchTerm = '';
   let libraryFilterStatus = 'all'; // 'all', 'due', 'upcoming', 'learning'
   let libraryDeckFilter = 'all';
@@ -1448,6 +1944,8 @@
       initReviewQueue();
     } else if (targetTabId === 'tab-daily') {
       renderDailyLogsTimeline();
+    } else if (targetTabId === 'tab-notebook') {
+      updateNotebookDeckSuggestions();
     } else if (targetTabId === 'tab-cards') {
       renderLibrary();
     } else if (targetTabId === 'tab-reminders') {
@@ -1471,6 +1969,14 @@
     document.getElementById('banner-dismiss-btn')?.addEventListener('click', () => {
       const banner = document.getElementById('top-reminder-banner');
       if (banner) banner.style.display = 'none';
+    });
+
+    document.getElementById('btn-daily-to-notebook')?.addEventListener('click', () => {
+      switchTab('tab-notebook');
+    });
+
+    document.getElementById('btn-library-to-notebook')?.addEventListener('click', () => {
+      switchTab('tab-notebook');
     });
   }
 
@@ -1508,6 +2014,7 @@
     initThemeAndAudio();
     initReviewQueue();
     initDailyLogForm();
+    initNotebookImporter();
     initLibrary();
     initCardModalHandlers();
     initReminderSettings();
