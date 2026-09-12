@@ -38,6 +38,7 @@ import { LibraryTab } from './components/LibraryTab';
 import { RetentionTab } from './components/RetentionTab';
 import { CardModal } from './components/CardModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { Bell, BookOpen, X } from 'lucide-react';
 
 export default function App() {
@@ -876,6 +877,9 @@ export default function App() {
 
       {/* Global Toast System */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* PWA Offline Mode Indicator */}
+      <OfflineIndicator />
     </div>
   );
 }

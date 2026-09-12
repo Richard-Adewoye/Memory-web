@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { AppSettings, AppStats, Flashcard, UserProfile, KnowledgeTier, TierSettings } from '../types';
 import { getTodayDateString, addDays, formatDateHuman, getTier1Progress, DEFAULT_TIER_SETTINGS } from '../lib/sm2';
 import { TierBadge, getTierMeta } from './TierBadge';
+import { PWAInstallButton } from './PWAInstallButton';
 import {
   TrendingUp,
   Award,
@@ -25,6 +26,7 @@ import {
   Calendar,
   Layers,
   ArrowRight,
+  Smartphone,
 } from 'lucide-react';
 
 interface RetentionTabProps {
@@ -529,6 +531,9 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({
           })}
         </div>
       </div>
+
+      {/* PWA App Installation Card */}
+      <PWAInstallButton variant="card" />
 
       {/* Reminder Alerts & Preferences */}
       <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-6 sm:p-8 space-y-6 shadow-xl">

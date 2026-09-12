@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AppSettings, AppStats, UserProfile } from '../types';
+import { PWAInstallButton } from './PWAInstallButton';
 import {
   Sparkles,
   Sun,
@@ -11,9 +12,6 @@ import {
   LogIn,
   LogOut,
   Cloud,
-  CloudCheck,
-  User as UserIcon,
-  Bookmark,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -37,7 +35,6 @@ export const Header: React.FC<HeaderProps> = ({
   dueTodayCount,
   totalCardsCount,
   user,
-  isSyncing,
   activeTab,
   onTabChange,
   onToggleSound,
@@ -58,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div>
               <h1 className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
-                Spaced Repetition <span className="hidden sm:inline text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">SM-2 &amp; Firestore</span>
+                Spaced Repetition <span className="hidden sm:inline text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">PWA &amp; SM-2</span>
               </h1>
               <p className="text-xs text-slate-400 hidden sm:block">Memory Retention &amp; Knowledge References Journal</p>
             </div>
@@ -66,6 +63,9 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Quick Stats & Controls */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* PWA In-App Install Button */}
+            <PWAInstallButton variant="header" />
+
             {/* Streak Counter */}
             <div
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs sm:text-sm font-semibold"
