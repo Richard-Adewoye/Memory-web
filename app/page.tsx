@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   AppState,
@@ -7,28 +9,28 @@ import {
   ParsedNotebookCard,
   DailyGoalSettings,
   AppSettings,
-} from './types';
+} from '@/types';
 import {
   loadState,
   saveState,
   DEFAULT_DATA,
   exportCardsCsv,
   exportDataJson,
-} from './lib/storage';
-import { getTodayDateString, addDays } from './lib/sm2';
-import { playSound } from './lib/audio';
-import { Header } from './components/Header';
-import { DailyGoalTracker } from './components/DailyGoalTracker';
-import { ReviewTab } from './components/ReviewTab';
-import { DailyLogTab } from './components/DailyLogTab';
-import { NotebookTab } from './components/NotebookTab';
-import { LibraryTab } from './components/LibraryTab';
-import { RetentionTab } from './components/RetentionTab';
-import { CardModal } from './components/CardModal';
-import { ToastContainer, ToastMessage } from './components/Toast';
-import { Bell, BookOpen, X } from 'lucide-react';
+} from '@/lib/storage';
+import { getTodayDateString, addDays } from '@/lib/sm2';
+import { playSound } from '@/lib/audio';
+import { Header } from '@/components/Header';
+import { DailyGoalTracker } from '@/components/DailyGoalTracker';
+import { ReviewTab } from '@/components/ReviewTab';
+import { DailyLogTab } from '@/components/DailyLogTab';
+import { NotebookTab } from '@/components/NotebookTab';
+import { LibraryTab } from '@/components/LibraryTab';
+import { RetentionTab } from '@/components/RetentionTab';
+import { CardModal } from '@/components/CardModal';
+import { ToastContainer, ToastMessage } from '@/components/Toast';
+import { Bell, Sparkles, X, BookOpen } from 'lucide-react';
 
-export default function App() {
+export default function Home() {
   const [mounted, setMounted] = useState<boolean>(false);
   const [appState, setAppState] = useState<AppState>(DEFAULT_DATA);
   const [activeTab, setActiveTab] = useState<string>('tab-review');
@@ -46,7 +48,7 @@ export default function App() {
     setMounted(true);
 
     // Set HTML theme attribute
-    const theme = loaded.settings?.theme || 'dark';
+    const theme = loaded.settings.theme || 'dark';
     document.documentElement.setAttribute('data-theme', theme);
   }, []);
 
@@ -83,7 +85,7 @@ export default function App() {
       ...prev,
       settings: { ...prev.settings, theme: nextTheme },
     }));
-    showToast(`Theme switched to ${nextTheme} mode`);
+    showToast(`Theme changed to ${nextTheme} mode`);
   };
 
   const handleToggleSound = () => {
@@ -470,7 +472,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 antialiased selection:bg-blue-600 selection:text-white">
+    <div className="min-h-screen flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]">
       {/* Top Header */}
       <Header
         settings={appState.settings}
@@ -515,7 +517,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Daily Goal Tracker */}
+        {/* Daily Goal Tracker (Visible across tabs or prominent in Daily Log) */}
         <DailyGoalTracker
           goalSettings={appState.settings.dailyGoal}
           createdTodayCount={createdTodayCount}
