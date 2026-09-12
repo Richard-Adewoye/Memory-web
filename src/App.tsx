@@ -29,6 +29,16 @@ import {
 } from './lib/firebase';
 import { getTodayDateString, addDays, getTier1Progress, DEFAULT_TIER_SETTINGS } from './lib/sm2';
 import { playSound } from './lib/audio';
+import {
+  notifyDueCards,
+  notifyGoalCompleted,
+  notifyStreakExtended,
+  notifyTier1GraduationReady,
+  notifyQueueFinished,
+  notifyDailyLogCreated,
+  notifyNotebookImported,
+  checkScheduledDailyReminder,
+} from './lib/notifications';
 import { Header } from './components/Header';
 import { DailyGoalTracker } from './components/DailyGoalTracker';
 import { ReviewTab } from './components/ReviewTab';
@@ -228,6 +238,31 @@ export default function App() {
     return (appState.cards || []).filter((c) => !c.nextReviewDate || c.nextReviewDate <= today);
   }, [appState.cards, today]);
 
+  // Scheduled Daily Reminder Interval Check
+  useEffect(() => {
+    if (!mounted) return;
+    const checkReminder = () => {
+      checkScheduledDailyReminder(
+        today,
+        dueTodayCards,
+        appState.settings,
+        (newSettings) => {
+          setAppState((prev) => ({
+            ...prev,
+            settings: { ...prev.settings, ...newSettings },
+          }));
+        },
+        showToast,
+        () => setActiveTab('tab-review')
+      );
+    };
+
+    // Check on mount and periodically every 30 seconds
+    checkReminder();
+    const intervalId = setInterval(checkReminder, 30000);
+    return () => clearInterval(intervalId);
+  }, [mounted, today, dueTodayCards, appState.settings, showToast]);
+
   // Created Today & Reviewed Today metrics for Daily Goal
   const createdTodayCount = useMemo(() => {
     return (appState.cards || []).filter((c) => {
@@ -268,7 +303,19 @@ export default function App() {
 
   // Card Reviewed in SM-2 Spaced Repetition Tab
   const handleCardReviewed = (cardId: string, updatedMetrics: SM2Result, quality: number) => {
+    const prevReviewed = reviewedTodayCount;
+    const prevCreated = createdTodayCount;
+    const targetGoal = appState.settings.dailyGoal?.target || 10;
+    const goalMode = appState.settings.dailyGoal?.mode || 'combined';
+
+    const prevGoalMetric = goalMode === 'created' ? prevCreated : goalMode === 'reviewed' ? prevReviewed : (prevCreated + prevReviewed);
+    const newGoalMetric = goalMode === 'created' ? prevCreated : goalMode === 'reviewed' ? (prevReviewed + 1) : (prevCreated + prevReviewed + 1);
+
+    const prevStreak = appState.stats.streak || 0;
+    const remainingDue = dueTodayCards.length;
+
     setAppState((prev) => {
+      let graduatedCardAlert = false;
       const updatedCards = prev.cards.map((c) => {
         if (c.id === cardId) {
           const historyEntry = {
@@ -277,7 +324,7 @@ export default function App() {
             interval: updatedMetrics.interval,
             easeFactor: updatedMetrics.easeFactor,
           };
-          return {
+          const updatedCard = {
             ...c,
             repetition: updatedMetrics.repetition,
             interval: updatedMetrics.interval,
@@ -287,6 +334,16 @@ export default function App() {
             tierCyclesCompleted: (c.tierCyclesCompleted || 0) + 1,
             history: [...(c.history || []), historyEntry],
           };
+
+          if ((updatedCard.tier || 'tier1') === 'tier1') {
+            const tierSettings = prev.settings.tierSettings || DEFAULT_TIER_SETTINGS;
+            const progress = getTier1Progress(updatedCard, tierSettings.tier1MonthDays);
+            if (progress.isMonthCompleted) {
+              graduatedCardAlert = true;
+            }
+          }
+
+          return updatedCard;
         }
         return c;
       });
@@ -295,6 +352,23 @@ export default function App() {
         ...prev.stats,
         totalReviewsCompleted: (prev.stats.totalReviewsCompleted || 0) + 1,
       });
+
+      // 1. Streak habit notification
+      if (updatedStats.streak > prevStreak) {
+        notifyStreakExtended(updatedStats.streak, prev.settings.soundEnabled, showToast);
+      }
+
+      // 2. Goal completion notification
+      if (prevGoalMetric < targetGoal && newGoalMetric >= targetGoal) {
+        notifyGoalCompleted(targetGoal, goalMode, prev.settings.soundEnabled, showToast);
+      }
+
+      // 3. Queue finished notification or graduation notification
+      if (remainingDue <= 1) {
+        notifyQueueFinished(prevReviewed + 1, prev.settings.soundEnabled, showToast);
+      } else if (graduatedCardAlert) {
+        notifyTier1GraduationReady(1, prev.settings.soundEnabled, showToast, () => setActiveTab('tab-reminders'));
+      }
 
       return {
         ...prev,
@@ -447,6 +521,13 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
 
+    const prevReviewed = reviewedTodayCount;
+    const prevCreated = createdTodayCount;
+    const targetGoal = appState.settings.dailyGoal?.target || 10;
+    const goalMode = appState.settings.dailyGoal?.mode || 'combined';
+    const prevGoalMetric = goalMode === 'created' ? prevCreated : goalMode === 'reviewed' ? prevReviewed : (prevCreated + prevReviewed);
+    const newGoalMetric = goalMode === 'created' ? (prevCreated + newCards.length) : goalMode === 'reviewed' ? prevReviewed : (prevCreated + newCards.length + prevReviewed);
+
     setAppState((prev) => {
       const updatedStats = updateStreak(prev.stats);
       return {
@@ -457,9 +538,17 @@ export default function App() {
       };
     });
 
-    showToast(
-      `Recorded daily study log with ${newCards.length} new spaced flashcard${newCards.length === 1 ? '' : 's'} and citations!`
+    notifyDailyLogCreated(
+      logData.title,
+      newCards.length,
+      (logData.references || []).length,
+      appState.settings.soundEnabled,
+      showToast
     );
+
+    if (prevGoalMetric < targetGoal && newGoalMetric >= targetGoal) {
+      notifyGoalCompleted(targetGoal, goalMode, appState.settings.soundEnabled, showToast);
+    }
   };
 
   // Delete Daily Log
@@ -559,6 +648,13 @@ export default function App() {
       ];
     }
 
+    const prevReviewed = reviewedTodayCount;
+    const prevCreated = createdTodayCount;
+    const targetGoal = appState.settings.dailyGoal?.target || 10;
+    const goalMode = appState.settings.dailyGoal?.mode || 'combined';
+    const prevGoalMetric = goalMode === 'created' ? prevCreated : goalMode === 'reviewed' ? prevReviewed : (prevCreated + prevReviewed);
+    const newGoalMetric = goalMode === 'created' ? (prevCreated + newCards.length) : goalMode === 'reviewed' ? prevReviewed : (prevCreated + newCards.length + prevReviewed);
+
     setAppState((prev) => {
       const updatedStats = updateStreak(prev.stats);
       return {
@@ -570,14 +666,16 @@ export default function App() {
     });
 
     const totalImported = newCards.length;
-    if (scheduleMode === 'today') {
-      showToast(
-        `Imported ${totalImported} card${totalImported > 1 ? 's' : ''}! Ready for review.`,
-        'Start Review →',
-        () => setActiveTab('tab-review')
-      );
-    } else {
-      showToast(`Imported ${totalImported} card${totalImported > 1 ? 's' : ''} into "${deckName}"!`);
+    notifyNotebookImported(
+      totalImported,
+      deckName,
+      appState.settings.soundEnabled,
+      showToast,
+      scheduleMode === 'today' ? () => setActiveTab('tab-review') : undefined
+    );
+
+    if (prevGoalMetric < targetGoal && newGoalMetric >= targetGoal) {
+      notifyGoalCompleted(targetGoal, goalMode, appState.settings.soundEnabled, showToast);
     }
   };
 
@@ -704,31 +802,39 @@ export default function App() {
   };
 
   const handleTestReminder = (tier?: KnowledgeTier) => {
-    playSound('complete', appState.settings.soundEnabled);
+    notifyDueCards(
+      dueTodayCards,
+      appState.settings.soundEnabled,
+      showToast,
+      () => setActiveTab('tab-review')
+    );
+  };
 
-    const t1Due = dueTodayCards.filter((c) => (c.tier || 'tier1') === 'tier1').length;
-    const t2Due = dueTodayCards.filter((c) => c.tier === 'tier2').length;
-    const t3Due = dueTodayCards.filter((c) => c.tier === 'tier3').length;
-    const customDue = dueTodayCards.filter((c) => c.tier === 'custom').length;
+  const handleTestGoalNotification = () => {
+    notifyGoalCompleted(
+      appState.settings.dailyGoal?.target || 10,
+      appState.settings.dailyGoal?.mode || 'combined',
+      appState.settings.soundEnabled,
+      showToast
+    );
+  };
 
-    const alertBody = `Due Today: ${dueTodayCards.length} total (T1: ${t1Due} [2d/1mo], T2: ${t2Due} [3d], T3: ${t3Due} [2x/wk], Custom: ${customDue})`;
+  const handleTestStreakNotification = () => {
+    notifyStreakExtended(
+      appState.stats.streak || 3,
+      appState.settings.soundEnabled,
+      showToast
+    );
+  };
 
-    if ('Notification' in window) {
-      if (Notification.permission === 'granted') {
-        new Notification('Knowledge Tier Recall Alert 🧠', {
-          body: alertBody,
-        });
-      } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission().then((permission) => {
-          if (permission === 'granted') {
-            new Notification('Knowledge Tier Recall Alert 🧠', {
-              body: alertBody,
-            });
-          }
-        });
-      }
-    }
-    showToast(`🔔 ${alertBody}`);
+  const handleTestGraduationNotification = () => {
+    const t1Count = appState.cards.filter((c) => (c.tier || 'tier1') === 'tier1').length;
+    notifyTier1GraduationReady(
+      Math.max(1, t1Count),
+      appState.settings.soundEnabled,
+      showToast,
+      () => setActiveTab('tab-reminders')
+    );
   };
 
   if (!mounted) {
@@ -859,6 +965,9 @@ export default function App() {
             onImportJson={handleImportJson}
             onResetSeedData={handleResetSeedData}
             onTestReminder={handleTestReminder}
+            onTestGoalNotification={handleTestGoalNotification}
+            onTestStreakNotification={handleTestStreakNotification}
+            onTestGraduationNotification={handleTestGraduationNotification}
             onSignIn={handleSignIn}
             onSignOut={handleSignOut}
             onManualCloudSync={handleManualCloudSync}

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { AppSettings, AppStats, Flashcard, UserProfile, KnowledgeTier, TierSettings } from '../types';
 import { getTodayDateString, addDays, formatDateHuman, getTier1Progress, DEFAULT_TIER_SETTINGS } from '../lib/sm2';
+import { getNotificationPermissionStatus, requestNotificationPermission } from '../lib/notifications';
 import { TierBadge, getTierMeta } from './TierBadge';
 import { PWAInstallButton } from './PWAInstallButton';
 import {
@@ -9,6 +10,7 @@ import {
   BookOpen,
   CheckCircle2,
   Bell,
+  BellRing,
   Download,
   Upload,
   RefreshCw,
@@ -27,6 +29,9 @@ import {
   Layers,
   ArrowRight,
   Smartphone,
+  Trophy,
+  Flame,
+  GraduationCap,
 } from 'lucide-react';
 
 interface RetentionTabProps {
@@ -43,6 +48,9 @@ interface RetentionTabProps {
   onImportJson: (file: File) => void;
   onResetSeedData: () => void;
   onTestReminder: (tier?: KnowledgeTier) => void;
+  onTestGoalNotification?: () => void;
+  onTestStreakNotification?: () => void;
+  onTestGraduationNotification?: () => void;
   onSignIn: () => void;
   onSignOut: () => void;
   onManualCloudSync: () => void;
@@ -62,12 +70,25 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({
   onImportJson,
   onResetSeedData,
   onTestReminder,
+  onTestGoalNotification,
+  onTestStreakNotification,
+  onTestGraduationNotification,
   onSignIn,
   onSignOut,
   onManualCloudSync,
 }) => {
   const today = getTodayDateString();
   const tierSettings: TierSettings = settings.tierSettings || DEFAULT_TIER_SETTINGS;
+
+  const [permissionStatus, setPermissionStatus] = useState<string>(() => getNotificationPermissionStatus());
+
+  const handleRequestPermission = async () => {
+    const res = await requestNotificationPermission();
+    setPermissionStatus(res);
+    if (res === 'granted') {
+      onUpdateSettings({ notificationsEnabled: true });
+    }
+  };
 
   const totalCards = cards.length;
   const masteredCount = cards.filter((c) => (c.repetition || 0) >= 4).length;
@@ -537,53 +558,112 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({
 
       {/* Reminder Alerts & Preferences */}
       <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-6 sm:p-8 space-y-6 shadow-xl">
-        <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
-          <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center">
-            <Bell className="w-5 h-5" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center">
+              <BellRing className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white">Spaced Repetition Notifications &amp; Daily Alerts</h3>
+              <p className="text-xs text-slate-400">Automated habit reminders across all knowledge tiers, daily study goals, and streak milestones</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-base font-bold text-white">Spaced Repetition Reminders &amp; Daily Alerts</h3>
-            <p className="text-xs text-slate-400">Configure daily habit alerts to prevent forgetting curve decay across all knowledge tiers</p>
+
+          {/* Browser Notification Permission Badge */}
+          <div className="flex items-center gap-2">
+            {permissionStatus === 'granted' ? (
+              <span className="px-3 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Browser Alerts Active
+              </span>
+            ) : permissionStatus === 'denied' ? (
+              <span className="px-3 py-1 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-1.5" title="Notifications are blocked in your browser settings. In-app toasts and sound alerts remain active.">
+                <Bell className="w-3.5 h-3.5" />
+                In-App &amp; Sound Active
+              </span>
+            ) : (
+              <button
+                onClick={handleRequestPermission}
+                className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-purple-600/20"
+              >
+                <Bell className="w-3.5 h-3.5 animate-bounce" />
+                Enable Web Notifications
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
-          <div className="space-y-4">
-            <label className="flex items-center gap-3 cursor-pointer">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          <div className="space-y-4 bg-slate-950/60 p-5 rounded-2xl border border-slate-800/80">
+            <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={settings.notificationsEnabled}
                 onChange={(e) => onUpdateSettings({ notificationsEnabled: e.target.checked })}
-                className="w-5 h-5 rounded text-blue-600 bg-slate-950 border-slate-700 focus:ring-0 cursor-pointer"
+                className="w-5 h-5 mt-0.5 rounded text-blue-600 bg-slate-950 border-slate-700 focus:ring-0 cursor-pointer"
               />
               <div>
-                <div className="text-sm font-semibold text-white">Enable Spaced Recall Alerts &amp; Browser Notifications</div>
-                <div className="text-xs text-slate-400">Notifies you when Tier 1 (2d), Tier 2 (3d), Tier 3 (twice a week), or Custom cards are due</div>
+                <div className="text-sm font-semibold text-white">Enable Spaced Recall Alerts &amp; Daily Reminders</div>
+                <div className="text-xs text-slate-400 mt-0.5">
+                  Sends scheduled alerts when Tier 1 (2-day), Tier 2 (3-day), Tier 3 (2x/week), or Custom flashcards are due for review.
+                </div>
               </div>
             </label>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 pt-2 border-t border-slate-800/80">
               <label className="text-xs font-semibold text-slate-300">Preferred Daily Notification Time:</label>
               <input
                 type="time"
                 value={settings.dailyReminderTime || '19:00'}
                 onChange={(e) => onUpdateSettings({ dailyReminderTime: e.target.value })}
-                className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
               />
             </div>
           </div>
 
-          <div className="flex flex-col gap-2.5 sm:items-end">
-            <button
-              onClick={() => onTestReminder()}
-              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition flex items-center justify-center gap-2"
-            >
-              <Bell className="w-4 h-4 text-purple-400" />
-              Trigger Test Reminder Alert
-            </button>
-            <span className="text-[11px] text-slate-500">
-              Notification cues respect your browser permission settings
-            </span>
+          {/* Test Triggers for Primary App Features */}
+          <div className="space-y-3 bg-slate-950/60 p-5 rounded-2xl border border-slate-800/80">
+            <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">Test Feature Notifications:</div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => onTestReminder()}
+                className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition flex items-center gap-2"
+                title="Test Daily Spaced Due Cards Alert"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-blue-400" />
+                <span className="truncate">🧠 Spaced Due Alert</span>
+              </button>
+
+              <button
+                onClick={() => onTestGoalNotification && onTestGoalNotification()}
+                className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition flex items-center gap-2"
+                title="Test Daily Study Goal Met Notification"
+              >
+                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                <span className="truncate">🎯 Goal Met Alert</span>
+              </button>
+
+              <button
+                onClick={() => onTestStreakNotification && onTestStreakNotification()}
+                className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition flex items-center gap-2"
+                title="Test Streak Habit Milestone Notification"
+              >
+                <Flame className="w-3.5 h-3.5 text-orange-400" />
+                <span className="truncate">🔥 Streak Habit Alert</span>
+              </button>
+
+              <button
+                onClick={() => onTestGraduationNotification && onTestGraduationNotification()}
+                className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition flex items-center gap-2"
+                title="Test Tier 1 1-Month Foundation Graduation Alert"
+              >
+                <GraduationCap className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="truncate">🎓 Tier 1 Graduation</span>
+              </button>
+            </div>
+            <div className="text-[11px] text-slate-500">
+              Dispatches native PWA web notifications, synchronized audio cues, and in-app toasts.
+            </div>
           </div>
         </div>
       </div>
