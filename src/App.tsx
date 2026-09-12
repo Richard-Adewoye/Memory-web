@@ -7,6 +7,8 @@ import {
   ParsedNotebookCard,
   DailyGoalSettings,
   AppSettings,
+  UserProfile,
+  KnowledgeReference,
 } from './types';
 import {
   loadState,
@@ -15,6 +17,15 @@ import {
   exportCardsCsv,
   exportDataJson,
 } from './lib/storage';
+import {
+  subscribeToAuth,
+  signInWithGoogle,
+  logoutUser,
+  loadUserDataFromFirestore,
+  syncAppStateToFirestore,
+  deleteCardFromFirestore,
+  deleteLogFromFirestore,
+} from './lib/firebase';
 import { getTodayDateString, addDays } from './lib/sm2';
 import { playSound } from './lib/audio';
 import { Header } from './components/Header';
@@ -35,29 +46,13 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [showReminderBanner, setShowReminderBanner] = useState<boolean>(true);
 
+  // Firebase Auth & Cloud Sync State
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
   // Modal State
   const [isCardModalOpen, setIsCardModalOpen] = useState<boolean>(false);
   const [editingCard, setEditingCard] = useState<Flashcard | null>(null);
-
-  // Load state on mount
-  useEffect(() => {
-    const loaded = loadState();
-    setAppState(loaded);
-    setMounted(true);
-
-    // Set HTML theme attribute
-    const theme = loaded.settings?.theme || 'dark';
-    document.documentElement.setAttribute('data-theme', theme);
-  }, []);
-
-  // Save state whenever appState updates (after mount)
-  useEffect(() => {
-    if (mounted) {
-      saveState(appState);
-    }
-  }, [appState, mounted]);
-
-  const today = getTodayDateString();
 
   // Toast System
   const showToast = useCallback(
@@ -74,6 +69,67 @@ export default function App() {
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  // Load state on mount (from local storage)
+  useEffect(() => {
+    const loaded = loadState();
+    setAppState(loaded);
+    setMounted(true);
+
+    const theme = loaded.settings?.theme || 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+  }, []);
+
+  // Firebase Auth Listener
+  useEffect(() => {
+    const unsubscribe = subscribeToAuth(async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        // Attempt to load existing cloud data from Firestore
+        try {
+          setIsSyncing(true);
+          const cloudData = await loadUserDataFromFirestore(currentUser.uid);
+          if (cloudData && (cloudData.cards?.length || cloudData.dailyLogs?.length)) {
+            setAppState((prev) => ({
+              ...prev,
+              settings: cloudData.settings ? { ...prev.settings, ...cloudData.settings } : prev.settings,
+              stats: cloudData.stats ? { ...prev.stats, ...cloudData.stats } : prev.stats,
+              cards: cloudData.cards || prev.cards,
+              dailyLogs: cloudData.dailyLogs || prev.dailyLogs,
+            }));
+            showToast(`Welcome back, ${currentUser.displayName || 'Learner'}! Loaded cloud database.`);
+          } else {
+            // First time login - upload current state to Firestore
+            await syncAppStateToFirestore(currentUser.uid, appState);
+            showToast(`Signed in! Initialized Firestore cloud database for ${currentUser.displayName || 'Learner'}.`);
+          }
+        } catch (err) {
+          console.error('Firestore sync error on auth change:', err);
+          showToast('Signed in. Could not sync with Firestore.');
+        } finally {
+          setIsSyncing(false);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Save state whenever appState updates
+  useEffect(() => {
+    if (mounted) {
+      saveState(appState);
+
+      // Also debounced or direct sync to Firestore if user is authenticated
+      if (user) {
+        syncAppStateToFirestore(user.uid, appState).catch((err) => {
+          console.error('Background Firestore sync error', err);
+        });
+      }
+    }
+  }, [appState, mounted, user]);
+
+  const today = getTodayDateString();
 
   // Theme & Sound Handlers
   const handleToggleTheme = () => {
@@ -111,6 +167,49 @@ export default function App() {
       settings: { ...prev.settings, ...newSettings },
     }));
     showToast('Settings saved successfully');
+  };
+
+  // Auth Action Handlers
+  const handleSignIn = async () => {
+    try {
+      setIsSyncing(true);
+      const res = await signInWithGoogle();
+      showToast(`Signed in as ${res.displayName || res.email}!`);
+    } catch (err: unknown) {
+      console.error('Google Sign-in failed', err);
+      showToast('Google Sign-In was cancelled or failed.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await logoutUser();
+      setUser(null);
+      showToast('Signed out. Local offline mode active.');
+    } catch (err) {
+      console.error('Sign out error', err);
+      showToast('Error signing out.');
+    }
+  };
+
+  const handleManualCloudSync = async () => {
+    if (!user) {
+      handleSignIn();
+      return;
+    }
+    try {
+      setIsSyncing(true);
+      await syncAppStateToFirestore(user.uid, appState);
+      playSound('complete', appState.settings.soundEnabled);
+      showToast('Cloud database synchronized successfully with Firestore! ☁️');
+    } catch (err) {
+      console.error('Manual sync failed', err);
+      showToast('Cloud sync failed.');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Unique Decks List
@@ -202,10 +301,10 @@ export default function App() {
     });
   };
 
-  // Save Daily Log with attached flashcards
+  // Save Daily Log with attached flashcards and references
   const handleSaveDailyLog = (
     logData: Omit<DailyLog, 'id' | 'createdAt'>,
-    newCardsData: { question: string; answer: string }[]
+    newCardsData: { question: string; answer: string; references?: KnowledgeReference[] }[]
   ) => {
     const logId = 'log_' + Date.now();
     const createdCardIds: string[] = [];
@@ -221,9 +320,10 @@ export default function App() {
         notes: `Created from daily log: "${logData.title}" (${logData.subject})`,
         deck: logData.subject,
         tags: ['daily-log', logData.subject.toLowerCase().replace(/\s+/g, '-')],
+        references: cData.references || logData.references,
         dailyLogId: logId,
         repetition: 0,
-        interval: 1, // Due tomorrow for SM-2 initial recall
+        interval: 1, // Due tomorrow for initial recall reinforcement
         easeFactor: 2.5,
         nextReviewDate: addDays(logData.date || today, 1),
         lastReviewedDate: logData.date || today,
@@ -251,12 +351,15 @@ export default function App() {
     });
 
     showToast(
-      `Recorded daily learning log with ${newCards.length} new spaced flashcard${newCards.length === 1 ? '' : 's'}!`
+      `Recorded daily study log with ${newCards.length} new spaced flashcard${newCards.length === 1 ? '' : 's'} and citations!`
     );
   };
 
   // Delete Daily Log
   const handleDeleteLog = (logId: string) => {
+    if (user) {
+      deleteLogFromFirestore(user.uid, logId);
+    }
     setAppState((prev) => ({
       ...prev,
       dailyLogs: prev.dailyLogs.filter((l) => l.id !== logId),
@@ -299,6 +402,7 @@ export default function App() {
         notes: `Imported from notebook: ${deckName}`,
         deck: deckName,
         tags: ['notebook', deckName.toLowerCase().replace(/\s+/g, '-')],
+        references: c.references,
         dailyLogId: saveToDailyLog ? logId : null,
         repetition: 0,
         interval,
@@ -319,8 +423,9 @@ export default function App() {
           date: today,
           subject: deckName,
           title: dailyLogTitle || `Notebook Study: ${deckName}`,
-          notes: rawText || `Imported ${newCards.length} flashcards from notebook for memory work.`,
+          notes: rawText || `Imported ${newCards.length} flashcards from notebook for memory reinforcement.`,
           confidence: 'solid',
+          references: parsed[0]?.references,
           cardIds: createdCardIds,
           createdAt: new Date().toISOString(),
         },
@@ -361,7 +466,13 @@ export default function App() {
     setIsCardModalOpen(true);
   };
 
-  const handleSaveCardModal = (data: { question: string; answer: string; notes: string; deck: string }) => {
+  const handleSaveCardModal = (data: {
+    question: string;
+    answer: string;
+    notes: string;
+    deck: string;
+    references?: KnowledgeReference[];
+  }) => {
     if (editingCard) {
       setAppState((prev) => ({
         ...prev,
@@ -371,7 +482,7 @@ export default function App() {
             : c
         ),
       }));
-      showToast('Flashcard updated successfully!');
+      showToast('Flashcard & references updated successfully!');
     } else {
       const newCard: Flashcard = {
         id: 'card_' + Date.now(),
@@ -380,7 +491,7 @@ export default function App() {
         repetition: 0,
         interval: 1,
         easeFactor: 2.5,
-        nextReviewDate: today, // Ready today
+        nextReviewDate: today,
         lastReviewedDate: '',
         createdAt: new Date().toISOString(),
         createdDate: today,
@@ -390,11 +501,14 @@ export default function App() {
         ...prev,
         cards: [newCard, ...prev.cards],
       }));
-      showToast('New card added and ready for review!');
+      showToast('New card created with reference citations!');
     }
   };
 
   const handleDeleteCard = (cardId: string) => {
+    if (user) {
+      deleteCardFromFirestore(user.uid, cardId);
+    }
     setAppState((prev) => ({
       ...prev,
       cards: prev.cards.filter((c) => c.id !== cardId),
@@ -405,7 +519,7 @@ export default function App() {
   // Export & Backup Actions
   const handleExportCsv = () => {
     exportCardsCsv(appState.cards);
-    showToast('Flashcards exported as CSV spreadsheet!');
+    showToast('Flashcards & references exported as CSV spreadsheet!');
   };
 
   const handleExportJson = () => {
@@ -433,11 +547,14 @@ export default function App() {
   };
 
   const handleResetSeedData = () => {
-    if (window.confirm('Reset all decks and logs back to starter memory science data?')) {
+    if (window.confirm('Reset all decks, references, and logs back to starter memory science data?')) {
       const freshSeed = JSON.parse(JSON.stringify(DEFAULT_DATA));
       setAppState(freshSeed);
       saveState(freshSeed);
-      showToast('Restored default cognitive psychology starter decks!');
+      if (user) {
+        syncAppStateToFirestore(user.uid, freshSeed);
+      }
+      showToast('Restored default cognitive psychology starter decks & citations!');
     }
   };
 
@@ -471,16 +588,20 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 antialiased selection:bg-blue-600 selection:text-white">
-      {/* Top Header */}
+      {/* Top Header with Google Sign In & Sync */}
       <Header
         settings={appState.settings}
         stats={appState.stats}
         dueTodayCount={dueTodayCards.length}
         totalCardsCount={appState.cards.length}
+        user={user}
+        isSyncing={isSyncing}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onToggleSound={handleToggleSound}
         onToggleTheme={handleToggleTheme}
+        onSignIn={handleSignIn}
+        onSignOut={handleSignOut}
       />
 
       {/* Spaced Review Due Banner Alert */}
@@ -534,7 +655,7 @@ export default function App() {
           />
         )}
 
-        {/* Tab 2: Daily Learning Log */}
+        {/* Tab 2: Daily Learning Log & Citations */}
         {activeTab === 'tab-daily' && (
           <DailyLogTab
             dailyLogs={appState.dailyLogs}
@@ -566,23 +687,28 @@ export default function App() {
           />
         )}
 
-        {/* Tab 5: Retention Schedule & Settings */}
+        {/* Tab 5: Retention Schedule & Firebase Cloud Sync */}
         {activeTab === 'tab-reminders' && (
           <RetentionTab
             cards={appState.cards}
             stats={appState.stats}
             settings={appState.settings}
+            user={user}
+            isSyncing={isSyncing}
             onUpdateSettings={handleUpdateSettings}
             onExportCsv={handleExportCsv}
             onExportJson={handleExportJson}
             onImportJson={handleImportJson}
             onResetSeedData={handleResetSeedData}
             onTestReminder={handleTestReminder}
+            onSignIn={handleSignIn}
+            onSignOut={handleSignOut}
+            onManualCloudSync={handleManualCloudSync}
           />
         )}
       </main>
 
-      {/* Card Create/Edit Modal */}
+      {/* Card Create/Edit Modal with References */}
       <CardModal
         isOpen={isCardModalOpen}
         editingCard={editingCard}

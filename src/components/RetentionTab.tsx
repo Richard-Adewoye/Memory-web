@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppSettings, AppStats, Flashcard } from '../types';
+import { AppSettings, AppStats, Flashcard, UserProfile } from '../types';
 import { getTodayDateString, addDays, formatDateHuman } from '../lib/sm2';
 import {
   TrendingUp,
@@ -13,30 +13,45 @@ import {
   RefreshCw,
   FileSpreadsheet,
   FileCode,
+  Cloud,
+  LogIn,
+  LogOut,
+  Bookmark,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface RetentionTabProps {
   cards: Flashcard[];
   stats: AppStats;
   settings: AppSettings;
+  user: UserProfile | null;
+  isSyncing: boolean;
   onUpdateSettings: (newSettings: Partial<AppSettings>) => void;
   onExportCsv: () => void;
   onExportJson: () => void;
   onImportJson: (file: File) => void;
   onResetSeedData: () => void;
   onTestReminder: () => void;
+  onSignIn: () => void;
+  onSignOut: () => void;
+  onManualCloudSync: () => void;
 }
 
 export const RetentionTab: React.FC<RetentionTabProps> = ({
   cards,
   stats,
   settings,
+  user,
+  isSyncing,
   onUpdateSettings,
   onExportCsv,
   onExportJson,
   onImportJson,
   onResetSeedData,
   onTestReminder,
+  onSignIn,
+  onSignOut,
+  onManualCloudSync,
 }) => {
   const today = getTodayDateString();
 
@@ -44,6 +59,9 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({
   const dueTodayCount = cards.filter((c) => !c.nextReviewDate || c.nextReviewDate <= today).length;
   const masteredCount = cards.filter((c) => (c.repetition || 0) >= 4).length;
   const totalReviews = stats.totalReviewsCompleted || 0;
+
+  const totalReferencedCards = cards.filter((c) => c.references && c.references.length > 0).length;
+  const totalReferencesCount = cards.reduce((acc, c) => acc + (c.references?.length || 0), 0);
 
   // 7-day review forecast calculation
   const forecastDays = Array.from({ length: 7 }, (_, i) => {
@@ -65,6 +83,63 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 space-y-8">
+      {/* Firebase Cloud Sync Banner & Status */}
+      <div className="rounded-3xl bg-gradient-to-r from-blue-900/60 via-indigo-900/60 to-purple-900/60 border border-blue-500/30 p-6 sm:p-8 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-blue-600/30 border border-blue-400/40 text-blue-300 flex items-center justify-center shrink-0">
+              <Cloud className="w-6 h-6 text-blue-300" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                Firebase Firestore Cloud Synchronization
+                {user && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    Cloud Synced
+                  </span>
+                )}
+              </h3>
+              <p className="text-xs text-slate-300">
+                {user
+                  ? `Signed in as ${user.displayName || user.email}. Flashcards, knowledge citations, and daily logs are stored in Firestore.`
+                  : 'Sign in with Google to persistently synchronize your flashcards and references across all your devices.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            {user ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onManualCloudSync}
+                  disabled={isSyncing}
+                  className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold transition flex items-center gap-1.5 shadow"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                  {isSyncing ? 'Syncing...' : 'Sync Now'}
+                </button>
+                <button
+                  onClick={onSignOut}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-rose-950/60 border border-slate-700 text-rose-300 text-xs font-semibold transition flex items-center gap-1.5"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={onSignIn}
+                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30 flex items-center gap-2"
+              >
+                <LogIn className="w-4 h-4" />
+                Sign in with Google
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* 4 Retention Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Metric 1 */}
@@ -80,11 +155,13 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({
         {/* Metric 2 */}
         <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-lg space-y-2">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold uppercase tracking-wider">Due for Review</span>
-            <Clock className="w-4 h-4 text-rose-400" />
+            <span className="text-xs font-semibold uppercase tracking-wider">Knowledge Citations</span>
+            <Bookmark className="w-4 h-4 text-amber-400" />
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-rose-400 tracking-tight">{dueTodayCount}</div>
-          <div className="text-xs text-slate-400">Cards ready for active recall</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-amber-400 tracking-tight">
+            {totalReferencesCount}
+          </div>
+          <div className="text-xs text-slate-400">Across {totalReferencedCards} cards &amp; notes</div>
         </div>
 
         {/* Metric 3 */}
@@ -101,9 +178,9 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({
         <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-lg space-y-2">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-semibold uppercase tracking-wider">Lifetime Reviews</span>
-            <CheckCircle2 className="w-4 h-4 text-amber-400" />
+            <CheckCircle2 className="w-4 h-4 text-purple-400" />
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-amber-400 tracking-tight">{totalReviews}</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-purple-400 tracking-tight">{totalReviews}</div>
           <div className="text-xs text-slate-400">SM-2 test completions</div>
         </div>
       </div>
@@ -166,7 +243,7 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({
             <Bell className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-white">Spaced Repetition Reminders & Alerts</h3>
+            <h3 className="text-base font-bold text-white">Spaced Repetition Reminders &amp; Alerts</h3>
             <p className="text-xs text-slate-400">Configure daily habit alerts to prevent forgetting curve decay</p>
           </div>
         </div>
@@ -219,8 +296,8 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({
             <Download className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-white">Data Portability, Backup & Reset</h3>
-            <p className="text-xs text-slate-400">Export your flashcards for spreadsheets or backup your entire study journal</p>
+            <h3 className="text-base font-bold text-white">Data Portability, Backup &amp; Reset</h3>
+            <p className="text-xs text-slate-400">Export your flashcards and references for spreadsheets or backup your entire study journal</p>
           </div>
         </div>
 
@@ -231,8 +308,8 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({
             className="p-4 rounded-2xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-left space-y-2 transition group shadow-sm"
           >
             <FileSpreadsheet className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
-            <div className="font-bold text-xs text-white">Export Flashcards (CSV)</div>
-            <div className="text-[11px] text-slate-400">Download formatted for Excel & Google Sheets</div>
+            <div className="font-bold text-xs text-white">Export Flashcards &amp; Citations (CSV)</div>
+            <div className="text-[11px] text-slate-400">Formatted for Excel &amp; Google Sheets</div>
           </button>
 
           {/* JSON Backup */}
@@ -241,8 +318,8 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({
             className="p-4 rounded-2xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-left space-y-2 transition group shadow-sm"
           >
             <FileCode className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />
-            <div className="font-bold text-xs text-white">Export Backup (JSON)</div>
-            <div className="text-[11px] text-slate-400">Full journal, stats & review history archive</div>
+            <div className="font-bold text-xs text-white">Export Full Backup (JSON)</div>
+            <div className="text-[11px] text-slate-400">Full journal, stats &amp; references archive</div>
           </button>
 
           {/* Import JSON */}

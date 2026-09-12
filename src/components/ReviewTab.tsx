@@ -2,16 +2,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Flashcard, SM2Result } from '../types';
 import { getTodayDateString, calculateSM2, getSM2Previews } from '../lib/sm2';
 import { playSound } from '../lib/audio';
+import { getRefTypeIcon, getRefTypeLabel } from './ReferenceManager';
 import {
   RotateCw,
   Sparkles,
-  Award,
-  Layers,
   CheckCircle2,
-  Calendar,
   Zap,
-  ArrowRight,
   BookOpen,
+  Bookmark,
+  ExternalLink,
+  Quote,
+  Layers,
 } from 'lucide-react';
 
 interface ReviewTabProps {
@@ -69,7 +70,6 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({
   // Keyboard shortcuts (Space = flip, 1-4 = rating)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if typing in an input
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
         return;
       }
@@ -136,6 +136,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({
   }
 
   const previews = getSM2Previews(currentCard);
+  const references = currentCard.references || [];
 
   return (
     <div className="max-w-3xl mx-auto py-6 px-4 space-y-6">
@@ -156,13 +157,21 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({
       {/* Main Flashcard View */}
       <div
         onClick={handleFlip}
-        className="relative min-h-[340px] sm:min-h-[380px] rounded-3xl bg-slate-900 border border-slate-700/80 p-6 sm:p-10 flex flex-col justify-between shadow-2xl cursor-pointer hover:border-slate-600 transition group select-none overflow-hidden"
+        className="relative min-h-[360px] sm:min-h-[400px] rounded-3xl bg-slate-900 border border-slate-700/80 p-6 sm:p-10 flex flex-col justify-between shadow-2xl cursor-pointer hover:border-slate-600 transition group select-none overflow-hidden"
       >
         {/* Card Top Pill */}
         <div className="flex items-center justify-between">
-          <span className="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20">
-            {currentCard.deck || 'General Memory'}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20">
+              {currentCard.deck || 'General Memory'}
+            </span>
+            {references.length > 0 && (
+              <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[11px] font-semibold flex items-center gap-1">
+                <Bookmark className="w-3 h-3" />
+                <span>{references.length} Reference{references.length === 1 ? '' : 's'}</span>
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1.5 text-xs text-slate-400 group-hover:text-slate-200 transition">
             <RotateCw className="w-3.5 h-3.5" />
             <span>Click or Space to {isFlipped ? 'Show Front' : 'Reveal Answer'}</span>
@@ -188,6 +197,59 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({
               {currentCard.notes && (
                 <div className="pt-3 text-xs text-slate-400 italic max-w-md mx-auto border-t border-slate-800">
                   💡 {currentCard.notes}
+                </div>
+              )}
+
+              {/* Display References / Citations */}
+              {references.length > 0 && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="pt-4 mt-3 border-t border-slate-800 text-left max-w-xl mx-auto space-y-2 cursor-default"
+                >
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                    <Bookmark className="w-3 h-3 text-amber-400" />
+                    <span>Knowledge References &amp; Proof:</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {references.map((ref) => (
+                      <div
+                        key={ref.id}
+                        className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 text-xs space-y-1"
+                      >
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 text-[10px] font-semibold">
+                            {getRefTypeIcon(ref.type)}
+                            <span>{getRefTypeLabel(ref.type)}</span>
+                          </span>
+                          <span className="font-bold text-white">{ref.title}</span>
+                          {ref.author && <span className="text-slate-400">({ref.author})</span>}
+                          {ref.locator && (
+                            <span className="text-blue-300 font-mono text-[11px]">[{ref.locator}]</span>
+                          )}
+                        </div>
+
+                        {ref.quote && (
+                          <div className="text-slate-300 italic text-[11px] flex items-center gap-1 pl-1">
+                            <Quote className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                            <span>&ldquo;{ref.quote}&rdquo;</span>
+                          </div>
+                        )}
+
+                        {ref.url && (
+                          <a
+                            href={ref.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 hover:underline pt-0.5"
+                          >
+                            <ExternalLink className="w-2.5 h-2.5" />
+                            <span>Open Source Link</span>
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

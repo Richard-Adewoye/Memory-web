@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
-import { DailyLog, Flashcard } from '../types';
+import { DailyLog, Flashcard, KnowledgeReference } from '../types';
 import { getTodayDateString, formatDateHuman } from '../lib/sm2';
 import { playSound } from '../lib/audio';
+import { ReferenceManager, getRefTypeIcon, getRefTypeLabel } from './ReferenceManager';
 import {
+  Calendar,
   BookOpen,
   Plus,
   Trash2,
   Sparkles,
-  Calendar,
-  Layers,
+  ExternalLink,
   ChevronDown,
-  ChevronUp,
-  Award,
-  CheckCircle,
+  Quote,
+  Bookmark,
 } from 'lucide-react';
 
 interface DailyLogTabProps {
@@ -21,7 +21,7 @@ interface DailyLogTabProps {
   soundEnabled: boolean;
   onSaveDailyLog: (
     logData: Omit<DailyLog, 'id' | 'createdAt'>,
-    newCards: { question: string; answer: string }[]
+    newCardsData: { question: string; answer: string; references?: KnowledgeReference[] }[]
   ) => void;
   onDeleteLog: (logId: string) => void;
 }
@@ -35,325 +35,377 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({
 }) => {
   const today = getTodayDateString();
 
+  // Form State
   const [date, setDate] = useState<string>(today);
   const [subject, setSubject] = useState<string>('');
   const [title, setTitle] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [confidence, setConfidence] = useState<'breakthrough' | 'solid' | 'challenging'>('solid');
+  const [references, setReferences] = useState<KnowledgeReference[]>([]);
 
-  // Flashcards to generate with this log
-  const [logCards, setLogCards] = useState<{ question: string; answer: string }[]>([
+  // Inline Flashcards to create alongside log
+  const [newCards, setNewCards] = useState<{ question: string; answer: string }[]>([
     { question: '', answer: '' },
   ]);
 
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
-  const handleAddCardField = () => {
-    setLogCards((prev) => [...prev, { question: '', answer: '' }]);
-    playSound('flip', soundEnabled);
+  const handleAddCardRow = () => {
+    setNewCards((prev) => [...prev, { question: '', answer: '' }]);
   };
 
-  const handleRemoveCardField = (index: number) => {
-    setLogCards((prev) => prev.filter((_, i) => i !== index));
+  const handleRemoveCardRow = (index: number) => {
+    setNewCards((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleUpdateCardField = (index: number, field: 'question' | 'answer', value: string) => {
-    setLogCards((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
-      return copy;
+  const handleCardChange = (index: number, field: 'question' | 'answer', value: string) => {
+    setNewCards((prev) => {
+      const next = [...prev];
+      next[index][field] = value;
+      return next;
     });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !subject.trim()) return;
+    if (!subject.trim() || !title.trim() || !notes.trim()) return;
 
-    // Filter valid cards
-    const validCards = logCards.filter((c) => c.question.trim() && c.answer.trim());
+    // Filter valid card rows and pass inherited references
+    const validCards = newCards
+      .filter((c) => c.question.trim() && c.answer.trim())
+      .map((c) => ({
+        question: c.question.trim(),
+        answer: c.answer.trim(),
+        references: references.length > 0 ? references : undefined,
+      }));
 
     onSaveDailyLog(
       {
-        date: date || today,
+        date,
         subject: subject.trim(),
         title: title.trim(),
         notes: notes.trim(),
         confidence,
+        references: references.length > 0 ? references : undefined,
         cardIds: [],
       },
       validCards
     );
 
-    // Reset form
+    playSound('complete', soundEnabled);
+
+    // Reset Form
     setTitle('');
     setNotes('');
-    setLogCards([{ question: '', answer: '' }]);
-    playSound('complete', soundEnabled);
+    setSubject('');
+    setReferences([]);
+    setNewCards([{ question: '', answer: '' }]);
   };
 
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 space-y-8">
-      {/* Top Banner */}
-      <div className="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center">
-            <BookOpen className="w-5 h-5" />
-          </div>
+      {/* Top Creation Card */}
+      <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-6 sm:p-8 space-y-6 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-800">
           <div>
-            <h2 className="text-lg font-bold text-white">Daily Learning Log & Concept Capture</h2>
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-blue-400" />
+              Log Daily Study Session &amp; Sources
+            </h2>
             <p className="text-xs text-slate-400">
-              Synthesize key takeaways from today&apos;s studies and instantly generate spaced flashcards to prevent memory decay.
+              Document your daily learnings, attach reference citations, and turn key takeaways into spaced flashcards
             </p>
           </div>
+          <span className="text-xs font-mono text-slate-400">Active Recall Journal</span>
         </div>
-      </div>
 
-      {/* Main Grid: Form on Left, History on Right */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Create Daily Log Form (7 Cols) */}
-        <div className="lg:col-span-7 rounded-3xl bg-slate-900/90 border border-slate-800 p-6 sm:p-8 space-y-6 shadow-xl">
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <Plus className="w-4 h-4 text-blue-400" />
-            Record Today&apos;s Study Entry
-          </h3>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Date & Subject */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Study Date</label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Subject / Category <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Cognitive Psychology, Rust, Anatomy"
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  required
-                  className="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500 placeholder:text-slate-500"
-                />
-              </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Row 1: Date, Subject, Confidence */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Date</label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+              />
             </div>
 
-            {/* Title */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Core Topic / Lesson Title <span className="text-rose-400">*</span>
-              </label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Subject / Deck Name</label>
               <input
                 type="text"
-                placeholder="e.g. Long-Term Potentiation & Synaptic Strength"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="e.g. Cognitive Psychology, Organic Chemistry"
                 required
-                className="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500 placeholder:text-slate-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
               />
             </div>
 
-            {/* Key Insights & Synthesis */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Synthesis, Insights & Key Takeaways
-              </label>
-              <textarea
-                rows={4}
-                placeholder="Summarize the core concept in your own words (Feynman technique)..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full bg-slate-800/90 border border-slate-700 rounded-xl p-3.5 text-xs text-white focus:outline-none focus:border-blue-500 placeholder:text-slate-500 leading-relaxed"
-              />
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Session Comprehension</label>
+              <select
+                value={confidence}
+                onChange={(e) => setConfidence(e.target.value as 'breakthrough' | 'solid' | 'challenging')}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+              >
+                <option value="breakthrough">🌟 Breakthrough (Mastered Concepts)</option>
+                <option value="solid">🟢 Solid Comprehension</option>
+                <option value="challenging">🟡 Challenging (Needs Reinforcement)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Row 2: Title */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Study Topic / Key Concept</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Synaptic Plasticity &amp; Long-Term Potentiation (LTP)"
+              required
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          {/* Row 3: Synthesis Notes */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              Knowledge Synthesis &amp; Reflections (Markdown / Plain Text)
+            </label>
+            <textarea
+              rows={4}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Summarize the core mental models learned in your own words..."
+              required
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-white focus:outline-none focus:border-blue-500 leading-relaxed"
+            />
+          </div>
+
+          {/* Row 4: Knowledge References / Citations */}
+          <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
+            <ReferenceManager
+              references={references}
+              onChange={setReferences}
+              isEditable={true}
+            />
+          </div>
+
+          {/* Row 5: Create Flashcards from this log */}
+          <div className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  Reinforce with Instant Spaced Flashcards
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  These cards will automatically attach your session references and enter the SM-2 review queue
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddCardRow}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Card Prompt
+              </button>
             </div>
 
-            {/* Confidence Level */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-2">Comprehension Level</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'breakthrough', label: '🌟 Breakthrough', desc: 'Deep mastery' },
-                  { id: 'solid', label: '✅ Solid Understanding', desc: 'Comfortable' },
-                  { id: 'challenging', label: '⚠️ Needs Reinforcement', desc: 'Complex topic' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setConfidence(item.id as DailyLog['confidence'])}
-                    className={`p-2.5 rounded-xl border text-left transition ${
-                      confidence === item.id
-                        ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
-                        : 'bg-slate-800/90 text-slate-300 border-slate-700 hover:bg-slate-700/60'
-                    }`}
-                  >
-                    <div className="text-xs font-bold">{item.label}</div>
-                    <div className="text-[10px] opacity-75">{item.desc}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Attached Spaced Flashcards Generator */}
-            <div className="pt-4 border-t border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                    Convert Into Spaced Flashcards
-                  </h4>
-                  <p className="text-[11px] text-slate-400">
-                    Creates active recall prompt cards scheduled in the SM-2 engine
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleAddCardField}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition flex items-center gap-1"
-                >
-                  <Plus className="w-3 h-3" /> Add Card
-                </button>
-              </div>
-
-              {logCards.map((card, idx) => (
+            <div className="space-y-3">
+              {newCards.map((card, idx) => (
                 <div
                   key={idx}
-                  className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2 relative group"
+                  className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center gap-3 text-xs"
                 >
-                  <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400">
-                    <span>Card #{idx + 1}</span>
-                    {logCards.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveCardField(idx)}
-                        className="text-slate-500 hover:text-rose-400 p-1 transition"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
+                  <span className="text-slate-500 font-mono text-[11px] shrink-0">#{idx + 1}</span>
+
                   <input
                     type="text"
-                    placeholder="Question (e.g. What is the role of the hippocampus?)"
                     value={card.question}
-                    onChange={(e) => handleUpdateCardField(idx, 'question', e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                    onChange={(e) => handleCardChange(idx, 'question', e.target.value)}
+                    placeholder="Question / Active Recall Prompt..."
+                    className="flex-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   />
+
                   <input
                     type="text"
-                    placeholder="Answer (e.g. Memory consolidation & spatial indexing)"
                     value={card.answer}
-                    onChange={(e) => handleUpdateCardField(idx, 'answer', e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                    onChange={(e) => handleCardChange(idx, 'answer', e.target.value)}
+                    placeholder="Target Answer..."
+                    className="flex-1 w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   />
+
+                  {newCards.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveCardRow(idx)}
+                      className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition"
+                      title="Remove card"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
-
-            {/* Submit */}
-            <button
-              type="submit"
-              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm transition shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2"
-            >
-              <CheckCircle className="w-4 h-4" />
-              Save Daily Learning Log &amp; Queue Cards
-            </button>
-          </form>
-        </div>
-
-        {/* Right Column: Historical Daily Logs (5 Cols) */}
-        <div className="lg:col-span-5 rounded-3xl bg-slate-900/90 border border-slate-800 p-6 space-y-4 shadow-xl">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-blue-400" />
-              Learning History ({dailyLogs.length})
-            </h3>
-            <span className="text-xs text-slate-400">Past reflections</span>
           </div>
 
-          {dailyLogs.length === 0 ? (
-            <div className="p-8 text-center text-slate-500 text-xs">
-              No learning logs recorded yet. Use the form on the left to start your daily retention journal.
-            </div>
-          ) : (
-            <div className="space-y-3 max-h-[640px] overflow-y-auto pr-1">
-              {dailyLogs.map((log) => {
-                const isExpanded = expandedLogId === log.id;
-                const linkedCards = cards.filter((c) => log.cardIds?.includes(c.id) || c.dailyLogId === log.id);
+          <div className="flex items-center justify-end pt-2">
+            <button
+              type="submit"
+              className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition shadow-lg shadow-blue-600/30 flex items-center gap-2"
+            >
+              <BookOpen className="w-4 h-4" />
+              Save Study Log &amp; Queue Flashcards
+            </button>
+          </div>
+        </form>
+      </div>
 
-                return (
-                  <div
-                    key={log.id}
-                    className="rounded-2xl bg-slate-950/70 border border-slate-800 p-4 space-y-3 hover:border-slate-700 transition"
-                  >
-                    {/* Top Row: Date & Subject */}
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[11px] font-semibold truncate max-w-[140px]">
+      {/* Historical Daily Learning Logs */}
+      <div className="space-y-4">
+        <h3 className="text-base font-bold text-white flex items-center gap-2">
+          <BookOpen className="w-4 h-4 text-blue-400" />
+          Study Journal History ({dailyLogs.length} Entries)
+        </h3>
+
+        {dailyLogs.length === 0 ? (
+          <div className="p-8 text-center rounded-3xl bg-slate-900/50 border border-slate-800 text-slate-400 text-xs">
+            No study logs recorded yet. Use the form above to record your first session!
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {dailyLogs.map((log) => {
+              const attachedCards = cards.filter((c) => c.dailyLogId === log.id || (log.cardIds || []).includes(c.id));
+              const isExpanded = expandedLogId === log.id;
+              const logRefs = log.references || [];
+
+              return (
+                <div
+                  key={log.id}
+                  className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 hover:border-slate-700 transition shadow-lg"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-semibold">
                         {log.subject}
                       </span>
-                      <span className="text-[11px] font-mono text-slate-400">
-                        {formatDateHuman(log.date)}
-                      </span>
+                      <h4 className="text-sm font-bold text-white">{log.title}</h4>
                     </div>
 
-                    {/* Title */}
-                    <h4 className="text-sm font-bold text-white leading-snug">{log.title}</h4>
-
-                    {/* Notes Preview */}
-                    {log.notes && (
-                      <p className="text-xs text-slate-300 line-clamp-3 leading-relaxed">
-                        {log.notes}
-                      </p>
-                    )}
-
-                    {/* Linked Cards & Actions */}
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
-                      <div className="flex items-center gap-1.5">
-                        <Layers className="w-3.5 h-3.5 text-amber-400" />
-                        <span>{linkedCards.length} Spaced Cards</span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                          className="text-blue-400 hover:text-blue-300 font-semibold"
-                        >
-                          {isExpanded ? 'Hide' : 'Details'}
-                        </button>
-                        <button
-                          onClick={() => onDeleteLog(log.id)}
-                          className="text-slate-500 hover:text-rose-400 transition"
-                          title="Delete entry"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                    <div className="flex items-center gap-3 text-xs text-slate-400">
+                      <span className="font-mono">{formatDateHuman(log.date)}</span>
+                      <button
+                        onClick={() => onDeleteLog(log.id)}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition"
+                        title="Delete log"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
+                  </div>
 
-                    {/* Expanded Cards View */}
-                    {isExpanded && linkedCards.length > 0 && (
-                      <div className="pt-3 border-t border-slate-800 space-y-2 animate-in fade-in duration-150">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase">Attached Flashcards:</div>
-                        {linkedCards.map((c) => (
-                          <div key={c.id} className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-1">
-                            <div className="font-semibold text-slate-200">Q: {c.question}</div>
-                            <div className="text-slate-400">A: {c.answer}</div>
+                  {/* Notes Content */}
+                  <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap bg-slate-950/50 p-4 rounded-xl border border-slate-800/80">
+                    {log.notes}
+                  </div>
+
+                  {/* Attached References & Sources */}
+                  {logRefs.length > 0 && (
+                    <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
+                      <div className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                        <Bookmark className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Referenced Knowledge Sources ({logRefs.length})</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {logRefs.map((ref) => (
+                          <div
+                            key={ref.id}
+                            className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs space-y-1"
+                          >
+                            <div className="flex items-center gap-1.5 font-bold text-white">
+                              {getRefTypeIcon(ref.type)}
+                              <span className="truncate">{ref.title}</span>
+                            </div>
+
+                            {ref.author && (
+                              <div className="text-[11px] text-slate-400">Author: {ref.author}</div>
+                            )}
+
+                            {ref.locator && (
+                              <div className="text-[10px] font-mono text-blue-300">📍 {ref.locator}</div>
+                            )}
+
+                            {ref.quote && (
+                              <div className="text-[11px] text-slate-300 italic flex items-center gap-1 pt-0.5">
+                                <Quote className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                                <span>&ldquo;{ref.quote}&rdquo;</span>
+                              </div>
+                            )}
+
+                            {ref.url && (
+                              <a
+                                href={ref.url}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:underline pt-0.5"
+                              >
+                                <ExternalLink className="w-2.5 h-2.5" />
+                                <span className="truncate">{ref.url}</span>
+                              </a>
+                            )}
                           </div>
                         ))}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                    </div>
+                  )}
+
+                  {/* Attached Flashcards Accordion */}
+                  {attachedCards.length > 0 && (
+                    <div className="pt-2 border-t border-slate-800">
+                      <button
+                        onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                        className="text-xs font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>
+                          {attachedCards.length} Spaced Flashcard{attachedCards.length === 1 ? '' : 's'} Created
+                        </span>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {isExpanded && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-3 animate-in fade-in duration-150">
+                          {attachedCards.map((c) => (
+                            <div
+                              key={c.id}
+                              className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs space-y-1"
+                            >
+                              <div className="font-bold text-white">Q: {c.question}</div>
+                              <div className="text-slate-400">A: {c.answer}</div>
+                              <div className="text-[10px] font-mono text-slate-500 pt-1">
+                                Next Due: {c.nextReviewDate} | Int: {c.interval}d
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

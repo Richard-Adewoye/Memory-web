@@ -1,3 +1,15 @@
+export type ReferenceType = 'book' | 'paper' | 'article' | 'video' | 'lecture' | 'course' | 'link' | 'other';
+
+export interface KnowledgeReference {
+  id: string;
+  title: string;
+  url?: string;
+  type: ReferenceType;
+  locator?: string; // Chapter, page number, timestamp, or section
+  quote?: string;   // Excerpt or definition citation
+  author?: string;
+}
+
 export interface CardHistoryEntry {
   date: string;
   rating: number; // 1 = Again, 2 = Hard, 3 = Good, 4 = Easy
@@ -12,6 +24,7 @@ export interface Flashcard {
   notes?: string;
   deck: string;
   tags: string[];
+  references?: KnowledgeReference[];
   dailyLogId?: string | null;
   repetition: number;
   interval: number;
@@ -30,6 +43,7 @@ export interface DailyLog {
   title: string;
   notes: string;
   confidence: 'breakthrough' | 'solid' | 'challenging';
+  references?: KnowledgeReference[];
   cardIds: string[];
   createdAt: string;
 }
@@ -54,6 +68,13 @@ export interface AppStats {
   totalReviewsCompleted: number;
 }
 
+export interface UserProfile {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+}
+
 export interface AppState {
   settings: AppSettings;
   stats: AppStats;
@@ -74,4 +95,5 @@ export interface ParsedNotebookCard {
   typeLabel: string;
   question: string;
   answer: string;
+  references?: KnowledgeReference[];
 }

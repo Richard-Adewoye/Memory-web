@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Flashcard } from '../types';
+import { Flashcard, KnowledgeReference } from '../types';
+import { ReferenceManager } from './ReferenceManager';
 import { X, CheckCircle, Sparkles } from 'lucide-react';
 
 interface CardModalProps {
@@ -12,6 +13,7 @@ interface CardModalProps {
     answer: string;
     notes: string;
     deck: string;
+    references?: KnowledgeReference[];
   }) => void;
 }
 
@@ -26,6 +28,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [answer, setAnswer] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [deck, setDeck] = useState<string>('');
+  const [references, setReferences] = useState<KnowledgeReference[]>([]);
 
   useEffect(() => {
     if (editingCard) {
@@ -33,11 +36,13 @@ export const CardModal: React.FC<CardModalProps> = ({
       setAnswer(editingCard.answer || '');
       setNotes(editingCard.notes || '');
       setDeck(editingCard.deck || 'General');
+      setReferences(editingCard.references || []);
     } else {
       setQuestion('');
       setAnswer('');
       setNotes('');
       setDeck('General');
+      setReferences([]);
     }
   }, [editingCard, isOpen]);
 
@@ -52,20 +57,21 @@ export const CardModal: React.FC<CardModalProps> = ({
       answer: answer.trim(),
       notes: notes.trim(),
       deck: deck.trim() || 'General',
+      references: references.length > 0 ? references : undefined,
     });
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-lg rounded-3xl bg-slate-900 border border-slate-700 shadow-2xl p-6 sm:p-8 space-y-6">
+      <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl bg-slate-900 border border-slate-700 shadow-2xl p-6 sm:p-8 space-y-6">
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
               <Sparkles className="w-4 h-4" />
             </div>
             <h3 className="text-base font-bold text-white">
-              {editingCard ? 'Edit Flashcard' : 'Create New Flashcard'}
+              {editingCard ? 'Edit Flashcard & References' : 'Create New Flashcard & References'}
             </h3>
           </div>
           <button
@@ -91,7 +97,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             />
             {existingDecks.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-1.5">
-                {existingDecks.slice(0, 4).map((d) => (
+                {existingDecks.slice(0, 5).map((d) => (
                   <button
                     key={d}
                     type="button"
@@ -143,6 +149,15 @@ export const CardModal: React.FC<CardModalProps> = ({
               onChange={(e) => setNotes(e.target.value)}
               placeholder="e.g. Discovered by Hermann Ebbinghaus in 1885"
               className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          {/* Reference Citations Manager */}
+          <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
+            <ReferenceManager
+              references={references}
+              onChange={setReferences}
+              isEditable={true}
             />
           </div>
 

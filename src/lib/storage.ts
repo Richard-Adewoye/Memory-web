@@ -1,4 +1,4 @@
-import { AppState, Flashcard } from '../types';
+import { AppState, Flashcard, KnowledgeReference } from '../types';
 import { addDays, getTodayDateString } from './sm2';
 
 export const STORAGE_KEY = 'spaced_repetition_app_data_v2';
@@ -29,6 +29,26 @@ export const DEFAULT_DATA: AppState = {
       notes:
         'Learned how Hermann Ebbinghaus discovered memory decay. Without spaced repetition, over 70% of new information is forgotten within 48 hours. Active retrieval forces the brain to rebuild neural pathways.',
       confidence: 'breakthrough',
+      references: [
+        {
+          id: 'ref_seed_1',
+          title: 'Memory: A Contribution to Experimental Psychology',
+          author: 'Hermann Ebbinghaus',
+          type: 'book',
+          locator: 'Chapter 3, pp. 45–58',
+          quote: 'With considerable numbers of repetitions a surprising rapidity in the reproduction is attained.',
+          url: 'https://archive.org/details/memorycontributi00ebbiuoft',
+        },
+        {
+          id: 'ref_seed_2',
+          title: 'Synaptic Plasticity and Memory Mechanisms',
+          author: 'Nature Reviews Neuroscience',
+          type: 'paper',
+          locator: 'Vol. 15, Issue 2',
+          quote: 'Spaced training induces protein synthesis-dependent long-term potentiation in CA1 neurons.',
+          url: 'https://doi.org/10.1038/nrn3646',
+        },
+      ],
       cardIds: ['card_seed_1', 'card_seed_2'],
       createdAt: new Date().toISOString(),
     },
@@ -40,6 +60,25 @@ export const DEFAULT_DATA: AppState = {
       notes:
         'Re-reading gives the illusion of competence. Only testing yourself (active recall) activates true synaptic plasticity. Combined with the SM-2 algorithm intervals, retention jumps to 90%+.',
       confidence: 'solid',
+      references: [
+        {
+          id: 'ref_seed_3',
+          title: 'The Critical Importance of Retrieval Practice in Long-Term Retention',
+          author: 'Karpicke & Roediger (Science)',
+          type: 'paper',
+          locator: 'Science 319 (5865), 966-968',
+          quote: 'Repeated retrieval practice produced large positive effects on long-term retention compared to repeated studying.',
+          url: 'https://www.science.org/doi/10.1126/science.1152408',
+        },
+        {
+          id: 'ref_seed_4',
+          title: 'Building a Second Brain & Spaced Systems',
+          author: 'Tiago Forte',
+          type: 'book',
+          locator: 'Part 2: Organize for Actionability',
+          url: 'https://www.buildingasecondbrain.com',
+        },
+      ],
       cardIds: ['card_seed_3', 'card_seed_4', 'card_seed_5'],
       createdAt: new Date().toISOString(),
     },
@@ -53,6 +92,17 @@ export const DEFAULT_DATA: AppState = {
       notes: 'Discovered by Hermann Ebbinghaus in 1885.',
       deck: 'Cognitive Science',
       tags: ['memory', 'psychology'],
+      references: [
+        {
+          id: 'ref_card_1',
+          title: 'Memory: A Contribution to Experimental Psychology (1885)',
+          author: 'Hermann Ebbinghaus',
+          type: 'book',
+          locator: 'Section 7: Retention as Function of Time',
+          quote: 'Left to itself, memory decays in an inverse logarithmic ratio to elapsed time.',
+          url: 'https://archive.org/details/memorycontributi00ebbiuoft',
+        },
+      ],
       dailyLogId: 'log_seed_1',
       repetition: 0,
       interval: 0,
@@ -71,6 +121,16 @@ export const DEFAULT_DATA: AppState = {
       notes: 'Each successful review increases the next interval exponentially.',
       deck: 'Cognitive Science',
       tags: ['spaced-repetition', 'neuroscience'],
+      references: [
+        {
+          id: 'ref_card_2',
+          title: 'Spacing Effect in Learning and Memory',
+          author: 'Cepeda et al. (Psychological Bulletin)',
+          type: 'paper',
+          locator: 'Vol. 132(3), 354–380',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/16719566/',
+        },
+      ],
       dailyLogId: 'log_seed_1',
       repetition: 1,
       interval: 1,
@@ -89,6 +149,17 @@ export const DEFAULT_DATA: AppState = {
       notes: 'Also known as the Testing Effect in educational research.',
       deck: 'Study Methods',
       tags: ['learning', 'active-recall'],
+      references: [
+        {
+          id: 'ref_card_3',
+          title: 'The Testing Effect: Retrieval Practice Produces Long-Term Learning',
+          author: 'Roediger & Butler (Trends in Cognitive Sciences)',
+          type: 'paper',
+          locator: 'TICS Vol. 15(1), pp. 20-27',
+          quote: 'Testing is not merely an assessment tool; it is a powerful learning event.',
+          url: 'https://doi.org/10.1016/j.tics.2010.09.003',
+        },
+      ],
       dailyLogId: 'log_seed_2',
       repetition: 2,
       interval: 1,
@@ -107,6 +178,15 @@ export const DEFAULT_DATA: AppState = {
       notes: 'Invented by Sebastian Leitner in the 1970s.',
       deck: 'Study Methods',
       tags: ['flashcards', 'leitner'],
+      references: [
+        {
+          id: 'ref_card_4',
+          title: 'So lernt man lernen (How to Learn to Learn)',
+          author: 'Sebastian Leitner',
+          type: 'book',
+          locator: 'Freiburg 1972',
+        },
+      ],
       dailyLogId: 'log_seed_2',
       repetition: 1,
       interval: 3,
@@ -125,6 +205,16 @@ export const DEFAULT_DATA: AppState = {
       notes: 'Developed by Dr. Piotr Woźniak for SuperMemo in 1987.',
       deck: 'Algorithms',
       tags: ['sm-2', 'algorithms'],
+      references: [
+        {
+          id: 'ref_card_5',
+          title: 'Optimization of Learning (SuperMemo SM-2)',
+          author: 'Dr. Piotr A. Woźniak',
+          type: 'paper',
+          locator: 'Master Thesis, University of Technology in Poznań (1990)',
+          url: 'https://www.supermemo.com/en/blog/application-of-a-computer-to-improve-the-results-obtained-in-working-with-the-supermemo-method',
+        },
+      ],
       dailyLogId: 'log_seed_2',
       repetition: 2,
       interval: 6,
@@ -186,6 +276,7 @@ export function exportCardsCsv(cards: Flashcard[]) {
     'Answer_Back',
     'Notes',
     'Tags',
+    'References_Citations',
     'Interval_Days',
     'Ease_Factor',
     'Repetitions',
@@ -193,21 +284,26 @@ export function exportCardsCsv(cards: Flashcard[]) {
     'Last_Reviewed_Date',
   ];
 
-  const rows = cards.map((c) =>
-    [
+  const rows = cards.map((c) => {
+    const refsFormatted = (c.references || [])
+      .map((r) => `${r.title} [${r.type}]${r.locator ? ` (${r.locator})` : ''}${r.url ? ` <${r.url}>` : ''}`)
+      .join(' | ');
+
+    return [
       escapeCsvCell(c.id),
       escapeCsvCell(c.deck || 'General'),
       escapeCsvCell(c.question || ''),
       escapeCsvCell(c.answer || ''),
       escapeCsvCell(c.notes || ''),
       escapeCsvCell((c.tags || []).join('; ')),
+      escapeCsvCell(refsFormatted),
       escapeCsvCell(c.interval ?? 0),
       escapeCsvCell(c.easeFactor ? Number(c.easeFactor).toFixed(2) : '2.50'),
       escapeCsvCell(c.repetition ?? 0),
       escapeCsvCell(c.nextReviewDate || ''),
       escapeCsvCell(c.lastReviewedDate || ''),
-    ].join(',')
-  );
+    ].join(',');
+  });
 
   const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -215,7 +311,7 @@ export function exportCardsCsv(cards: Flashcard[]) {
 
   const dlAnchor = document.createElement('a');
   dlAnchor.setAttribute('href', url);
-  dlAnchor.setAttribute('download', `flashcards_export_${getTodayDateString()}.csv`);
+  dlAnchor.setAttribute('download', `flashcards_references_export_${getTodayDateString()}.csv`);
   document.body.appendChild(dlAnchor);
   dlAnchor.click();
   dlAnchor.remove();

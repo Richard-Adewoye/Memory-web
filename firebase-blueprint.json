@@ -1,0 +1,110 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and synchronization settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "settings": { "type": "object" },
+        "stats": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Flashcard": {
+      "title": "Flashcard",
+      "description": "Spaced repetition flashcard with SM-2 metrics and knowledge references",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "question": { "type": "string" },
+        "answer": { "type": "string" },
+        "notes": { "type": "string" },
+        "deck": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "url": { "type": "string" },
+              "type": { "type": "string" },
+              "locator": { "type": "string" },
+              "quote": { "type": "string" }
+            }
+          }
+        },
+        "dailyLogId": { "type": "string" },
+        "repetition": { "type": "number" },
+        "interval": { "type": "number" },
+        "easeFactor": { "type": "number" },
+        "nextReviewDate": { "type": "string" },
+        "lastReviewedDate": { "type": "string" },
+        "history": { "type": "array", "items": { "type": "object" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "question", "answer", "deck"]
+    },
+    "DailyLog": {
+      "title": "DailyLog",
+      "description": "Daily study entry with key synthesis, citations, and attached cards",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "date": { "type": "string" },
+        "subject": { "type": "string" },
+        "title": { "type": "string" },
+        "notes": { "type": "string" },
+        "confidence": { "type": "string" },
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "url": { "type": "string" },
+              "type": { "type": "string" },
+              "locator": { "type": "string" },
+              "quote": { "type": "string" }
+            }
+          }
+        },
+        "cardIds": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "date", "subject", "title"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "entity": "User",
+      "rules": {
+        "read": "request.auth != null && request.auth.uid == userId",
+        "write": "request.auth != null && request.auth.uid == userId"
+      }
+    },
+    "/users/{userId}/cards/{cardId}": {
+      "entity": "Flashcard",
+      "rules": {
+        "read": "request.auth != null && request.auth.uid == userId",
+        "write": "request.auth != null && request.auth.uid == userId"
+      }
+    },
+    "/users/{userId}/dailyLogs/{logId}": {
+      "entity": "DailyLog",
+      "rules": {
+        "read": "request.auth != null && request.auth.uid == userId",
+        "write": "request.auth != null && request.auth.uid == userId"
+      }
+    }
+  }
+}
