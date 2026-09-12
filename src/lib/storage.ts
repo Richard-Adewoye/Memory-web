@@ -1,7 +1,7 @@
 import { AppState, Flashcard, KnowledgeReference } from '../types';
-import { addDays, getTodayDateString } from './sm2';
+import { addDays, getTodayDateString, DEFAULT_TIER_SETTINGS } from './sm2';
 
-export const STORAGE_KEY = 'spaced_repetition_app_data_v2';
+export const STORAGE_KEY = 'spaced_repetition_app_data_v3';
 
 export const DEFAULT_DATA: AppState = {
   settings: {
@@ -14,6 +14,7 @@ export const DEFAULT_DATA: AppState = {
       target: 10,
       mode: 'combined',
     },
+    tierSettings: DEFAULT_TIER_SETTINGS,
   },
   stats: {
     streak: 3,
@@ -70,14 +71,6 @@ export const DEFAULT_DATA: AppState = {
           quote: 'Repeated retrieval practice produced large positive effects on long-term retention compared to repeated studying.',
           url: 'https://www.science.org/doi/10.1126/science.1152408',
         },
-        {
-          id: 'ref_seed_4',
-          title: 'Building a Second Brain & Spaced Systems',
-          author: 'Tiago Forte',
-          type: 'book',
-          locator: 'Part 2: Organize for Actionability',
-          url: 'https://www.buildingasecondbrain.com',
-        },
       ],
       cardIds: ['card_seed_3', 'card_seed_4', 'card_seed_5'],
       createdAt: new Date().toISOString(),
@@ -92,6 +85,9 @@ export const DEFAULT_DATA: AppState = {
       notes: 'Discovered by Hermann Ebbinghaus in 1885.',
       deck: 'Cognitive Science',
       tags: ['memory', 'psychology'],
+      tier: 'tier1',
+      tierStartedDate: addDays(getTodayDateString(), -10),
+      tierCyclesCompleted: 5,
       references: [
         {
           id: 'ref_card_1',
@@ -105,12 +101,12 @@ export const DEFAULT_DATA: AppState = {
       ],
       dailyLogId: 'log_seed_1',
       repetition: 0,
-      interval: 0,
+      interval: 2,
       easeFactor: 2.5,
       nextReviewDate: getTodayDateString(), // Due today!
       lastReviewedDate: addDays(getTodayDateString(), -2),
       createdAt: new Date().toISOString(),
-      createdDate: addDays(getTodayDateString(), -2),
+      createdDate: addDays(getTodayDateString(), -10),
       history: [],
     },
     {
@@ -121,6 +117,9 @@ export const DEFAULT_DATA: AppState = {
       notes: 'Each successful review increases the next interval exponentially.',
       deck: 'Cognitive Science',
       tags: ['spaced-repetition', 'neuroscience'],
+      tier: 'tier1',
+      tierStartedDate: addDays(getTodayDateString(), -20),
+      tierCyclesCompleted: 10,
       references: [
         {
           id: 'ref_card_2',
@@ -133,12 +132,12 @@ export const DEFAULT_DATA: AppState = {
       ],
       dailyLogId: 'log_seed_1',
       repetition: 1,
-      interval: 1,
+      interval: 2,
       easeFactor: 2.5,
       nextReviewDate: getTodayDateString(), // Due today!
-      lastReviewedDate: addDays(getTodayDateString(), -1),
+      lastReviewedDate: addDays(getTodayDateString(), -2),
       createdAt: new Date().toISOString(),
-      createdDate: addDays(getTodayDateString(), -2),
+      createdDate: addDays(getTodayDateString(), -20),
       history: [],
     },
     {
@@ -149,6 +148,9 @@ export const DEFAULT_DATA: AppState = {
       notes: 'Also known as the Testing Effect in educational research.',
       deck: 'Study Methods',
       tags: ['learning', 'active-recall'],
+      tier: 'tier2',
+      tierStartedDate: addDays(getTodayDateString(), -12),
+      tierCyclesCompleted: 4,
       references: [
         {
           id: 'ref_card_3',
@@ -162,12 +164,12 @@ export const DEFAULT_DATA: AppState = {
       ],
       dailyLogId: 'log_seed_2',
       repetition: 2,
-      interval: 1,
+      interval: 3,
       easeFactor: 2.6,
       nextReviewDate: getTodayDateString(), // Due today!
-      lastReviewedDate: addDays(getTodayDateString(), -1),
+      lastReviewedDate: addDays(getTodayDateString(), -3),
       createdAt: new Date().toISOString(),
-      createdDate: addDays(getTodayDateString(), -1),
+      createdDate: addDays(getTodayDateString(), -12),
       history: [],
     },
     {
@@ -178,6 +180,9 @@ export const DEFAULT_DATA: AppState = {
       notes: 'Invented by Sebastian Leitner in the 1970s.',
       deck: 'Study Methods',
       tags: ['flashcards', 'leitner'],
+      tier: 'tier3',
+      tierStartedDate: addDays(getTodayDateString(), -24),
+      tierCyclesCompleted: 7,
       references: [
         {
           id: 'ref_card_4',
@@ -188,13 +193,13 @@ export const DEFAULT_DATA: AppState = {
         },
       ],
       dailyLogId: 'log_seed_2',
-      repetition: 1,
-      interval: 3,
+      repetition: 3,
+      interval: 4,
       easeFactor: 2.5,
       nextReviewDate: addDays(getTodayDateString(), 2), // Upcoming
-      lastReviewedDate: addDays(getTodayDateString(), -1),
+      lastReviewedDate: addDays(getTodayDateString(), -2),
       createdAt: new Date().toISOString(),
-      createdDate: addDays(getTodayDateString(), -1),
+      createdDate: addDays(getTodayDateString(), -24),
       history: [],
     },
     {
@@ -205,6 +210,10 @@ export const DEFAULT_DATA: AppState = {
       notes: 'Developed by Dr. Piotr Woźniak for SuperMemo in 1987.',
       deck: 'Algorithms',
       tags: ['sm-2', 'algorithms'],
+      tier: 'custom',
+      customIntervalDays: 7,
+      tierStartedDate: addDays(getTodayDateString(), -35),
+      tierCyclesCompleted: 15,
       references: [
         {
           id: 'ref_card_5',
@@ -216,13 +225,13 @@ export const DEFAULT_DATA: AppState = {
         },
       ],
       dailyLogId: 'log_seed_2',
-      repetition: 2,
-      interval: 6,
+      repetition: 4,
+      interval: 7,
       easeFactor: 2.5,
       nextReviewDate: addDays(getTodayDateString(), 5), // Upcoming
-      lastReviewedDate: addDays(getTodayDateString(), -1),
+      lastReviewedDate: addDays(getTodayDateString(), -2),
       createdAt: new Date().toISOString(),
-      createdDate: addDays(getTodayDateString(), -1),
+      createdDate: addDays(getTodayDateString(), -35),
       history: [],
     },
   ],
@@ -238,6 +247,9 @@ export function loadState(): AppState {
         if (!parsed.settings) parsed.settings = {};
         if (!parsed.settings.dailyGoal) {
           parsed.settings.dailyGoal = { target: 10, mode: 'combined' };
+        }
+        if (!parsed.settings.tierSettings) {
+          parsed.settings.tierSettings = DEFAULT_TIER_SETTINGS;
         }
         return parsed;
       }
@@ -272,6 +284,8 @@ export function exportCardsCsv(cards: Flashcard[]) {
   const headers = [
     'ID',
     'Deck',
+    'Knowledge_Tier',
+    'Tier_Cadence',
     'Question_Front',
     'Answer_Back',
     'Notes',
@@ -289,9 +303,20 @@ export function exportCardsCsv(cards: Flashcard[]) {
       .map((r) => `${r.title} [${r.type}]${r.locator ? ` (${r.locator})` : ''}${r.url ? ` <${r.url}>` : ''}`)
       .join(' | ');
 
+    const tierLabel =
+      c.tier === 'tier1'
+        ? 'Tier 1 (Every 2d, 1 Mo)'
+        : c.tier === 'tier2'
+        ? 'Tier 2 (Every 3d)'
+        : c.tier === 'tier3'
+        ? 'Tier 3 (Twice a week)'
+        : `Custom (Every ${c.customIntervalDays || 7}d)`;
+
     return [
       escapeCsvCell(c.id),
       escapeCsvCell(c.deck || 'General'),
+      escapeCsvCell(c.tier || 'tier1'),
+      escapeCsvCell(tierLabel),
       escapeCsvCell(c.question || ''),
       escapeCsvCell(c.answer || ''),
       escapeCsvCell(c.notes || ''),
@@ -311,7 +336,7 @@ export function exportCardsCsv(cards: Flashcard[]) {
 
   const dlAnchor = document.createElement('a');
   dlAnchor.setAttribute('href', url);
-  dlAnchor.setAttribute('download', `flashcards_references_export_${getTodayDateString()}.csv`);
+  dlAnchor.setAttribute('download', `flashcards_tiers_export_${getTodayDateString()}.csv`);
   document.body.appendChild(dlAnchor);
   dlAnchor.click();
   dlAnchor.remove();

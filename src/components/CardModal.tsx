@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Flashcard, KnowledgeReference } from '../types';
+import { Flashcard, KnowledgeReference, KnowledgeTier } from '../types';
 import { ReferenceManager } from './ReferenceManager';
+import { TierSelector } from './TierSelector';
 import { X, CheckCircle, Sparkles } from 'lucide-react';
 
 interface CardModalProps {
@@ -13,6 +14,8 @@ interface CardModalProps {
     answer: string;
     notes: string;
     deck: string;
+    tier?: KnowledgeTier;
+    customIntervalDays?: number;
     references?: KnowledgeReference[];
   }) => void;
 }
@@ -28,6 +31,8 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [answer, setAnswer] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [deck, setDeck] = useState<string>('');
+  const [tier, setTier] = useState<KnowledgeTier>('tier1');
+  const [customIntervalDays, setCustomIntervalDays] = useState<number>(7);
   const [references, setReferences] = useState<KnowledgeReference[]>([]);
 
   useEffect(() => {
@@ -36,12 +41,16 @@ export const CardModal: React.FC<CardModalProps> = ({
       setAnswer(editingCard.answer || '');
       setNotes(editingCard.notes || '');
       setDeck(editingCard.deck || 'General');
+      setTier(editingCard.tier || 'tier1');
+      setCustomIntervalDays(editingCard.customIntervalDays || 7);
       setReferences(editingCard.references || []);
     } else {
       setQuestion('');
       setAnswer('');
       setNotes('');
       setDeck('General');
+      setTier('tier1');
+      setCustomIntervalDays(7);
       setReferences([]);
     }
   }, [editingCard, isOpen]);
@@ -57,6 +66,8 @@ export const CardModal: React.FC<CardModalProps> = ({
       answer: answer.trim(),
       notes: notes.trim(),
       deck: deck.trim() || 'General',
+      tier,
+      customIntervalDays: tier === 'custom' ? customIntervalDays : undefined,
       references: references.length > 0 ? references : undefined,
     });
     onClose();
@@ -64,14 +75,14 @@ export const CardModal: React.FC<CardModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl bg-slate-900 border border-slate-700 shadow-2xl p-6 sm:p-8 space-y-6">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-slate-900 border border-slate-700 shadow-2xl p-6 sm:p-8 space-y-6">
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
               <Sparkles className="w-4 h-4" />
             </div>
             <h3 className="text-base font-bold text-white">
-              {editingCard ? 'Edit Flashcard & References' : 'Create New Flashcard & References'}
+              {editingCard ? 'Edit Flashcard & Knowledge Tier' : 'Create Flashcard & Knowledge Tier'}
             </h3>
           </div>
           <button
@@ -82,10 +93,11 @@ export const CardModal: React.FC<CardModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Deck & Category */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              Deck / Category <span className="text-rose-400">*</span>
+              Deck / Subject Category <span className="text-rose-400">*</span>
             </label>
             <input
               type="text"
@@ -97,7 +109,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             />
             {existingDecks.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-1.5">
-                {existingDecks.slice(0, 5).map((d) => (
+                {existingDecks.slice(0, 6).map((d) => (
                   <button
                     key={d}
                     type="button"
@@ -111,6 +123,17 @@ export const CardModal: React.FC<CardModalProps> = ({
             )}
           </div>
 
+          {/* Knowledge Tier Selector */}
+          <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
+            <TierSelector
+              selectedTier={tier}
+              customIntervalDays={customIntervalDays}
+              onSelectTier={setTier}
+              onChangeCustomDays={setCustomIntervalDays}
+            />
+          </div>
+
+          {/* Question */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
               Question (Front of Card) <span className="text-rose-400">*</span>
@@ -125,6 +148,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             />
           </div>
 
+          {/* Answer */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
               Answer (Back of Card) <span className="text-rose-400">*</span>
@@ -139,6 +163,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             />
           </div>
 
+          {/* Notes */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
               Memory Anchor / Extra Notes (Optional)

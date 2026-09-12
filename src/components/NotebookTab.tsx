@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { ParsedNotebookCard, KnowledgeReference } from '../types';
+import { ParsedNotebookCard, KnowledgeReference, KnowledgeTier } from '../types';
 import { playSound } from '../lib/audio';
 import { ReferenceManager } from './ReferenceManager';
+import { TierSelector } from './TierSelector';
+import { TierBadge } from './TierBadge';
 import {
   Sparkles,
   Layers,
@@ -24,7 +26,9 @@ interface NotebookTabProps {
     scheduleMode: 'today' | 'stagger' | 'tomorrow',
     saveToDailyLog: boolean,
     dailyLogTitle: string,
-    rawText: string
+    rawText: string,
+    batchTier: KnowledgeTier,
+    batchCustomDays: number
   ) => void;
 }
 
@@ -57,6 +61,8 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
   const [saveToDailyLog, setSaveToDailyLog] = useState<boolean>(true);
   const [dailyLogTitle, setDailyLogTitle] = useState<string>('Notebook Study: Cognitive Science');
   const [references, setReferences] = useState<KnowledgeReference[]>([]);
+  const [batchTier, setBatchTier] = useState<KnowledgeTier>('tier1');
+  const [batchCustomDays, setBatchCustomDays] = useState<number>(7);
 
   // AI Generation States
   const [isGeneratingAI, setIsGeneratingAI] = useState<boolean>(false);
@@ -80,6 +86,8 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
         typeLabel: 'Q & A',
         question: match[1].trim(),
         answer: match[2].trim(),
+        tier: batchTier,
+        customIntervalDays: batchTier === 'custom' ? batchCustomDays : undefined,
         references: references.length > 0 ? references : undefined,
       });
     }
@@ -103,6 +111,8 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
             typeLabel: 'Term :: Def',
             question: `What is the definition of "${term.trim()}"?`,
             answer: def,
+            tier: batchTier,
+            customIntervalDays: batchTier === 'custom' ? batchCustomDays : undefined,
             references: references.length > 0 ? references : undefined,
           });
           return;
@@ -120,6 +130,8 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
             typeLabel: 'Cloze Deletion',
             question: `Fill in the missing terms: ${prompt}`,
             answer: answers,
+            tier: batchTier,
+            customIntervalDays: batchTier === 'custom' ? batchCustomDays : undefined,
             references: references.length > 0 ? references : undefined,
           });
           return;
@@ -135,6 +147,8 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
             typeLabel: 'Key Fact',
             question: `Recall key principle: "${content.slice(0, 45)}..."`,
             answer: content,
+            tier: batchTier,
+            customIntervalDays: batchTier === 'custom' ? batchCustomDays : undefined,
             references: references.length > 0 ? references : undefined,
           });
         }
@@ -142,7 +156,7 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
     });
 
     return results;
-  }, [rawText, references]);
+  }, [rawText, references, batchTier, batchCustomDays]);
 
   const [editableCards, setEditableCards] = useState<ParsedNotebookCard[]>([]);
 
@@ -171,6 +185,8 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
         typeLabel: 'Custom',
         question: '',
         answer: '',
+        tier: batchTier,
+        customIntervalDays: batchTier === 'custom' ? batchCustomDays : undefined,
         references: references.length > 0 ? references : undefined,
       },
     ]);
@@ -188,7 +204,6 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
     setAiStatusMessage('Analyzing study text with Gemini AI...');
 
     try {
-      // Periodic status update simulation while awaiting server response
       const statusTimer = setTimeout(() => {
         setAiStatusMessage('Synthesizing active recall question-answer pairs...');
       }, 1200);
@@ -216,7 +231,6 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
         throw new Error('Gemini did not find distinct concepts to convert into flashcards. Try adding more detailed text.');
       }
 
-      // Convert AI cards into ParsedNotebookCard array
       const newParsedCards: ParsedNotebookCard[] = generatedCards.map((c) => {
         const cardRefs: KnowledgeReference[] = [...references];
         if (c.citation || c.quote) {
@@ -233,11 +247,12 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
           typeLabel: c.keyConcept ? `AI: ${c.keyConcept}` : 'Gemini AI',
           question: c.question,
           answer: c.answer,
+          tier: batchTier,
+          customIntervalDays: batchTier === 'custom' ? batchCustomDays : undefined,
           references: cardRefs.length > 0 ? cardRefs : undefined,
         };
       });
 
-      // Replace or append
       setEditableCards(newParsedCards);
       playSound('flip', soundEnabled);
       setAiStatusMessage(`Generated ${newParsedCards.length} flashcards using Gemini AI!`);
@@ -260,7 +275,9 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
       scheduleMode,
       saveToDailyLog,
       dailyLogTitle.trim(),
-      rawText
+      rawText,
+      batchTier,
+      batchCustomDays
     );
   };
 
@@ -275,7 +292,7 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
               Notebook Flashcard Synthesizer &amp; AI Generator
             </h2>
             <p className="text-xs text-slate-400">
-              Paste raw markdown notes, lecture transcripts, or articles. Use smart rules or the Gemini AI engine to extract high-yield active recall flashcards.
+              Paste raw markdown notes, lecture transcripts, or articles. Assign Knowledge Tiers (Tier 1 2-day / 1mo, Tier 2 3-day, Tier 3 twice a week, or Custom) and generate cards with Gemini AI.
             </p>
           </div>
 
@@ -373,6 +390,16 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
             onChange={(e) => setRawText(e.target.value)}
             placeholder="Paste your raw lecture notes, study summaries, research highlights, or textbook paragraphs here..."
             className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xs font-mono text-white focus:outline-none focus:border-blue-500 leading-relaxed"
+          />
+        </div>
+
+        {/* Knowledge Tier Selector for Batch */}
+        <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
+          <TierSelector
+            selectedTier={batchTier}
+            customIntervalDays={batchCustomDays}
+            onSelectTier={setBatchTier}
+            onChangeCustomDays={setBatchCustomDays}
           />
         </div>
 
@@ -475,6 +502,7 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
                       {card.type === 'ai' && <Sparkles className="w-3 h-3 text-amber-400" />}
                       <span>{card.typeLabel}</span>
                     </span>
+                    <TierBadge tier={card.tier || batchTier} customIntervalDays={batchCustomDays} size="sm" />
                     {card.references && card.references.length > 0 && (
                       <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[10px] font-bold flex items-center gap-0.5">
                         <Bookmark className="w-3 h-3" />

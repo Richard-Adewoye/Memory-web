@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { DailyLog, Flashcard, KnowledgeReference } from '../types';
+import { DailyLog, Flashcard, KnowledgeReference, KnowledgeTier } from '../types';
 import { getTodayDateString, formatDateHuman } from '../lib/sm2';
 import { playSound } from '../lib/audio';
-import { ReferenceManager, getRefTypeIcon, getRefTypeLabel } from './ReferenceManager';
+import { ReferenceManager, getRefTypeIcon } from './ReferenceManager';
+import { TierSelector } from './TierSelector';
+import { TierBadge } from './TierBadge';
 import {
   Calendar,
   BookOpen,
@@ -21,7 +23,13 @@ interface DailyLogTabProps {
   soundEnabled: boolean;
   onSaveDailyLog: (
     logData: Omit<DailyLog, 'id' | 'createdAt'>,
-    newCardsData: { question: string; answer: string; references?: KnowledgeReference[] }[]
+    newCardsData: {
+      question: string;
+      answer: string;
+      tier?: KnowledgeTier;
+      customIntervalDays?: number;
+      references?: KnowledgeReference[];
+    }[]
   ) => void;
   onDeleteLog: (logId: string) => void;
 }
@@ -42,6 +50,8 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({
   const [notes, setNotes] = useState<string>('');
   const [confidence, setConfidence] = useState<'breakthrough' | 'solid' | 'challenging'>('solid');
   const [references, setReferences] = useState<KnowledgeReference[]>([]);
+  const [logTier, setLogTier] = useState<KnowledgeTier>('tier1');
+  const [logCustomDays, setLogCustomDays] = useState<number>(7);
 
   // Inline Flashcards to create alongside log
   const [newCards, setNewCards] = useState<{ question: string; answer: string }[]>([
@@ -70,12 +80,14 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({
     e.preventDefault();
     if (!subject.trim() || !title.trim() || !notes.trim()) return;
 
-    // Filter valid card rows and pass inherited references
+    // Filter valid card rows and pass inherited references and tier
     const validCards = newCards
       .filter((c) => c.question.trim() && c.answer.trim())
       .map((c) => ({
         question: c.question.trim(),
         answer: c.answer.trim(),
+        tier: logTier,
+        customIntervalDays: logTier === 'custom' ? logCustomDays : undefined,
         references: references.length > 0 ? references : undefined,
       }));
 
@@ -110,10 +122,10 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({
           <div>
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <Calendar className="w-5 h-5 text-blue-400" />
-              Log Daily Study Session &amp; Sources
+              Log Daily Study Session, Sources &amp; Knowledge Tier
             </h2>
             <p className="text-xs text-slate-400">
-              Document your daily learnings, attach reference citations, and turn key takeaways into spaced flashcards
+              Document your daily learnings, attach reference citations, and turn key takeaways into spaced flashcards with tier reminders
             </p>
           </div>
           <span className="text-xs font-mono text-slate-400">Active Recall Journal</span>
@@ -187,7 +199,17 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({
             />
           </div>
 
-          {/* Row 4: Knowledge References / Citations */}
+          {/* Row 4: Knowledge Tier Selection for Session Cards */}
+          <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
+            <TierSelector
+              selectedTier={logTier}
+              customIntervalDays={logCustomDays}
+              onSelectTier={setLogTier}
+              onChangeCustomDays={setLogCustomDays}
+            />
+          </div>
+
+          {/* Row 5: Knowledge References / Citations */}
           <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
             <ReferenceManager
               references={references}
@@ -196,7 +218,7 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({
             />
           </div>
 
-          {/* Row 5: Create Flashcards from this log */}
+          {/* Row 6: Create Flashcards from this log */}
           <div className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -205,7 +227,7 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({
                   Reinforce with Instant Spaced Flashcards
                 </h4>
                 <p className="text-[11px] text-slate-400">
-                  These cards will automatically attach your session references and enter the SM-2 review queue
+                  These cards will automatically attach your session references and enter the Spaced Repetition queue
                 </p>
               </div>
 
@@ -388,9 +410,12 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({
                           {attachedCards.map((c) => (
                             <div
                               key={c.id}
-                              className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs space-y-1"
+                              className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs space-y-1.5"
                             >
-                              <div className="font-bold text-white">Q: {c.question}</div>
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-white">Q: {c.question}</span>
+                                <TierBadge tier={c.tier || 'tier1'} customIntervalDays={c.customIntervalDays} size="sm" />
+                              </div>
                               <div className="text-slate-400">A: {c.answer}</div>
                               <div className="text-[10px] font-mono text-slate-500 pt-1">
                                 Next Due: {c.nextReviewDate} | Int: {c.interval}d

@@ -9,6 +9,7 @@ import {
   AppSettings,
   UserProfile,
   KnowledgeReference,
+  KnowledgeTier,
 } from './types';
 import {
   loadState,
@@ -26,7 +27,7 @@ import {
   deleteCardFromFirestore,
   deleteLogFromFirestore,
 } from './lib/firebase';
-import { getTodayDateString, addDays } from './lib/sm2';
+import { getTodayDateString, addDays, getTier1Progress, DEFAULT_TIER_SETTINGS } from './lib/sm2';
 import { playSound } from './lib/audio';
 import { Header } from './components/Header';
 import { DailyGoalTracker } from './components/DailyGoalTracker';
@@ -120,7 +121,7 @@ export default function App() {
     if (mounted) {
       saveState(appState);
 
-      // Also debounced or direct sync to Firestore if user is authenticated
+      // Also sync to Firestore if user is authenticated
       if (user) {
         syncAppStateToFirestore(user.uid, appState).catch((err) => {
           console.error('Background Firestore sync error', err);
@@ -282,6 +283,7 @@ export default function App() {
             easeFactor: updatedMetrics.easeFactor,
             nextReviewDate: updatedMetrics.nextReviewDate,
             lastReviewedDate: today,
+            tierCyclesCompleted: (c.tierCyclesCompleted || 0) + 1,
             history: [...(c.history || []), historyEntry],
           };
         }
@@ -301,10 +303,102 @@ export default function App() {
     });
   };
 
+  // Knowledge Tier Management Handler (Individual Card)
+  const handleUpdateCardTier = (cardId: string, tier: KnowledgeTier, customIntervalDays?: number) => {
+    setAppState((prev) => {
+      const updatedCards = prev.cards.map((c) => {
+        if (c.id === cardId) {
+          let interval = c.interval;
+          let nextReviewDate = c.nextReviewDate;
+
+          if (tier === 'tier1') {
+            interval = 2;
+            nextReviewDate = addDays(today, 2);
+          } else if (tier === 'tier2') {
+            interval = 3;
+            nextReviewDate = addDays(today, 3);
+          } else if (tier === 'tier3') {
+            interval = 3;
+            nextReviewDate = addDays(today, 3);
+          } else if (tier === 'custom') {
+            const days = customIntervalDays || 7;
+            interval = days;
+            nextReviewDate = addDays(today, days);
+          }
+
+          return {
+            ...c,
+            tier,
+            tierStartedDate: tier === 'tier1' ? (c.tierStartedDate || today) : undefined,
+            tierCyclesCompleted: tier === 'tier1' ? (c.tierCyclesCompleted || 0) : 0,
+            customIntervalDays: tier === 'custom' ? (customIntervalDays || 7) : undefined,
+            interval,
+            nextReviewDate,
+          };
+        }
+        return c;
+      });
+
+      return {
+        ...prev,
+        cards: updatedCards,
+      };
+    });
+
+    const tierLabels: Record<KnowledgeTier, string> = {
+      tier1: 'Tier 1 (Every 2 Days / 1 Month)',
+      tier2: 'Tier 2 (Every 3 Days)',
+      tier3: 'Tier 3 (Twice a Week)',
+      custom: `Custom (${customIntervalDays || 7} Days)`,
+    };
+    showToast(`Card updated to ${tierLabels[tier]}!`);
+  };
+
+  // Batch Graduation of Tier 1 Cards (after 1-month milestone)
+  const handleBatchGraduateTier1 = (targetTier: KnowledgeTier, customDays?: number) => {
+    let count = 0;
+    const tierSettings = appState.settings.tierSettings || DEFAULT_TIER_SETTINGS;
+
+    setAppState((prev) => {
+      const updatedCards = prev.cards.map((c) => {
+        if ((c.tier || 'tier1') === 'tier1' && getTier1Progress(c, tierSettings.tier1MonthDays).isMonthCompleted) {
+          count += 1;
+          let interval = 3;
+          if (targetTier === 'tier2') interval = 3;
+          else if (targetTier === 'tier3') interval = 3;
+          else if (targetTier === 'custom') interval = customDays || 7;
+
+          return {
+            ...c,
+            tier: targetTier,
+            customIntervalDays: targetTier === 'custom' ? (customDays || 7) : undefined,
+            interval,
+            nextReviewDate: addDays(today, interval),
+          };
+        }
+        return c;
+      });
+
+      return {
+        ...prev,
+        cards: updatedCards,
+      };
+    });
+
+    playSound('complete', appState.settings.soundEnabled);
+    showToast(`Graduated ${count} cards from Tier 1 foundation to ${targetTier.toUpperCase()}! 🎓`);
+  };
+
   // Save Daily Log with attached flashcards and references
   const handleSaveDailyLog = (
     logData: Omit<DailyLog, 'id' | 'createdAt'>,
-    newCardsData: { question: string; answer: string; references?: KnowledgeReference[] }[]
+    newCardsData: {
+      question: string;
+      answer: string;
+      tier?: KnowledgeTier;
+      customIntervalDays?: number;
+      references?: KnowledgeReference[];
+    }[]
   ) => {
     const logId = 'log_' + Date.now();
     const createdCardIds: string[] = [];
@@ -313,6 +407,14 @@ export default function App() {
     newCardsData.forEach((cData, idx) => {
       const cardId = 'card_' + Date.now() + '_' + idx;
       createdCardIds.push(cardId);
+      const tier: KnowledgeTier = cData.tier || 'tier1';
+
+      let interval = 2;
+      if (tier === 'tier1') interval = 2;
+      else if (tier === 'tier2') interval = 3;
+      else if (tier === 'tier3') interval = 3;
+      else if (tier === 'custom') interval = cData.customIntervalDays || 7;
+
       newCards.push({
         id: cardId,
         question: cData.question,
@@ -323,9 +425,13 @@ export default function App() {
         references: cData.references || logData.references,
         dailyLogId: logId,
         repetition: 0,
-        interval: 1, // Due tomorrow for initial recall reinforcement
+        interval,
         easeFactor: 2.5,
-        nextReviewDate: addDays(logData.date || today, 1),
+        tier,
+        tierStartedDate: tier === 'tier1' ? today : undefined,
+        tierCyclesCompleted: 0,
+        customIntervalDays: tier === 'custom' ? cData.customIntervalDays : undefined,
+        nextReviewDate: addDays(logData.date || today, interval),
         lastReviewedDate: logData.date || today,
         createdAt: new Date().toISOString(),
         createdDate: today,
@@ -374,7 +480,9 @@ export default function App() {
     scheduleMode: 'today' | 'stagger' | 'tomorrow',
     saveToDailyLog: boolean,
     dailyLogTitle: string,
-    rawText: string
+    rawText: string,
+    batchTier: KnowledgeTier = 'tier1',
+    batchCustomDays: number = 7
   ) => {
     const createdCardIds: string[] = [];
     const newCards: Flashcard[] = [];
@@ -383,16 +491,29 @@ export default function App() {
     parsed.forEach((c, idx) => {
       const cardId = 'card_' + Date.now() + '_' + idx;
       createdCardIds.push(cardId);
+      const tier = c.tier || batchTier;
+      const customDays = c.customIntervalDays || batchCustomDays;
 
       let nextReviewDate = today;
-      let interval = 0;
+      let interval = 2;
+
+      if (tier === 'tier1') {
+        interval = 2;
+      } else if (tier === 'tier2') {
+        interval = 3;
+      } else if (tier === 'tier3') {
+        interval = 3;
+      } else if (tier === 'custom') {
+        interval = customDays;
+      }
+
       if (scheduleMode === 'tomorrow') {
         nextReviewDate = addDays(today, 1);
-        interval = 1;
       } else if (scheduleMode === 'stagger') {
         const staggerOffset = (idx % 3) + 1;
         nextReviewDate = addDays(today, staggerOffset);
-        interval = staggerOffset;
+      } else if (scheduleMode === 'today') {
+        nextReviewDate = today;
       }
 
       newCards.push({
@@ -407,6 +528,10 @@ export default function App() {
         repetition: 0,
         interval,
         easeFactor: 2.5,
+        tier,
+        tierStartedDate: tier === 'tier1' ? today : undefined,
+        tierCyclesCompleted: 0,
+        customIntervalDays: tier === 'custom' ? customDays : undefined,
         nextReviewDate,
         lastReviewedDate: null,
         createdAt: new Date().toISOString(),
@@ -471,26 +596,45 @@ export default function App() {
     answer: string;
     notes: string;
     deck: string;
+    tier?: KnowledgeTier;
+    customIntervalDays?: number;
     references?: KnowledgeReference[];
   }) => {
+    const tier = data.tier || 'tier1';
     if (editingCard) {
       setAppState((prev) => ({
         ...prev,
         cards: prev.cards.map((c) =>
           c.id === editingCard.id
-            ? { ...c, ...data, tags: [data.deck.toLowerCase().replace(/\s+/g, '-')] }
+            ? {
+                ...c,
+                ...data,
+                tier,
+                customIntervalDays: tier === 'custom' ? data.customIntervalDays : undefined,
+                tags: [data.deck.toLowerCase().replace(/\s+/g, '-')],
+              }
             : c
         ),
       }));
-      showToast('Flashcard & references updated successfully!');
+      showToast('Flashcard & tier settings updated successfully!');
     } else {
+      let interval = 2;
+      if (tier === 'tier1') interval = 2;
+      else if (tier === 'tier2') interval = 3;
+      else if (tier === 'tier3') interval = 3;
+      else if (tier === 'custom') interval = data.customIntervalDays || 7;
+
       const newCard: Flashcard = {
         id: 'card_' + Date.now(),
         ...data,
         tags: [data.deck.toLowerCase().replace(/\s+/g, '-')],
         repetition: 0,
-        interval: 1,
+        interval,
         easeFactor: 2.5,
+        tier,
+        tierStartedDate: tier === 'tier1' ? today : undefined,
+        tierCyclesCompleted: 0,
+        customIntervalDays: tier === 'custom' ? data.customIntervalDays : undefined,
         nextReviewDate: today,
         lastReviewedDate: '',
         createdAt: new Date().toISOString(),
@@ -558,24 +702,32 @@ export default function App() {
     }
   };
 
-  const handleTestReminder = () => {
+  const handleTestReminder = (tier?: KnowledgeTier) => {
     playSound('complete', appState.settings.soundEnabled);
+
+    const t1Due = dueTodayCards.filter((c) => (c.tier || 'tier1') === 'tier1').length;
+    const t2Due = dueTodayCards.filter((c) => c.tier === 'tier2').length;
+    const t3Due = dueTodayCards.filter((c) => c.tier === 'tier3').length;
+    const customDue = dueTodayCards.filter((c) => c.tier === 'custom').length;
+
+    const alertBody = `Due Today: ${dueTodayCards.length} total (T1: ${t1Due} [2d/1mo], T2: ${t2Due} [3d], T3: ${t3Due} [2x/wk], Custom: ${customDue})`;
+
     if ('Notification' in window) {
       if (Notification.permission === 'granted') {
-        new Notification('Spaced Repetition Alert 🧠', {
-          body: `You have ${dueTodayCards.length} flashcard(s) scheduled for review today!`,
+        new Notification('Knowledge Tier Recall Alert 🧠', {
+          body: alertBody,
         });
       } else if (Notification.permission !== 'denied') {
         Notification.requestPermission().then((permission) => {
           if (permission === 'granted') {
-            new Notification('Spaced Repetition Alert 🧠', {
-              body: `You have ${dueTodayCards.length} flashcard(s) scheduled for review today!`,
+            new Notification('Knowledge Tier Recall Alert 🧠', {
+              body: alertBody,
             });
           }
         });
       }
     }
-    showToast(`🔔 Daily reminder test triggered for ${dueTodayCards.length} due card(s)!`);
+    showToast(`🔔 ${alertBody}`);
   };
 
   if (!mounted) {
@@ -611,7 +763,7 @@ export default function App() {
             <div className="flex items-center gap-2.5 min-w-0">
               <Bell className="w-4 h-4 text-amber-300 animate-bounce shrink-0" />
               <span className="truncate">
-                <strong>{dueTodayCards.length} flashcard{dueTodayCards.length === 1 ? '' : 's'}</strong> ready for spaced review today! Keep memory decay at bay.
+                <strong>{dueTodayCards.length} flashcard{dueTodayCards.length === 1 ? '' : 's'}</strong> ready for spaced review today across your knowledge tiers!
               </span>
             </div>
             <div className="flex items-center gap-3 shrink-0">
@@ -648,8 +800,10 @@ export default function App() {
         {activeTab === 'tab-review' && (
           <ReviewTab
             cards={appState.cards}
+            tierSettings={appState.settings.tierSettings}
             soundEnabled={appState.settings.soundEnabled}
             onCardReviewed={handleCardReviewed}
+            onUpdateCardTier={handleUpdateCardTier}
             onNavigateToNotebook={() => setActiveTab('tab-notebook')}
             onNavigateToDailyLog={() => setActiveTab('tab-daily')}
           />
@@ -684,6 +838,7 @@ export default function App() {
             onOpenEditModal={handleOpenEditModal}
             onDeleteCard={handleDeleteCard}
             onExportCsv={handleExportCsv}
+            onUpdateCardTier={handleUpdateCardTier}
           />
         )}
 
@@ -696,6 +851,8 @@ export default function App() {
             user={user}
             isSyncing={isSyncing}
             onUpdateSettings={handleUpdateSettings}
+            onUpdateCardTier={handleUpdateCardTier}
+            onBatchGraduateTier1={handleBatchGraduateTier1}
             onExportCsv={handleExportCsv}
             onExportJson={handleExportJson}
             onImportJson={handleImportJson}

@@ -1,5 +1,7 @@
 export type ReferenceType = 'book' | 'paper' | 'article' | 'video' | 'lecture' | 'course' | 'link' | 'other';
 
+export type KnowledgeTier = 'tier1' | 'tier2' | 'tier3' | 'custom';
+
 export interface KnowledgeReference {
   id: string;
   title: string;
@@ -26,6 +28,11 @@ export interface Flashcard {
   tags: string[];
   references?: KnowledgeReference[];
   dailyLogId?: string | null;
+  // Tier-based reminder system
+  tier?: KnowledgeTier;
+  tierStartedDate?: string; // YYYY-MM-DD when Tier 1 or current tier began
+  tierCyclesCompleted?: number; // Count of successful recall reviews in this tier
+  customIntervalDays?: number; // User-defined frequency from then on (e.g. 7, 14, 30)
   repetition: number;
   interval: number;
   easeFactor: number;
@@ -53,6 +60,15 @@ export interface DailyGoalSettings {
   mode: 'combined' | 'reviewed' | 'created';
 }
 
+export interface TierSettings {
+  tier1Interval: number; // Default: 2 days
+  tier1MonthDays: number; // Default: 30 days
+  tier2Interval: number; // Default: 3 days
+  tier3Interval: number; // Default: 3.5 (alternating 3 and 4 days / twice a week)
+  defaultPostMonthFrequency: 'tier2' | 'tier3' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
+  defaultCustomDays: number;
+}
+
 export interface AppSettings {
   theme: 'dark' | 'light';
   soundEnabled: boolean;
@@ -60,6 +76,7 @@ export interface AppSettings {
   dailyReminderTime: string;
   lastReminderDate: string;
   dailyGoal: DailyGoalSettings;
+  tierSettings?: TierSettings;
 }
 
 export interface AppStats {
@@ -88,6 +105,8 @@ export interface SM2Result {
   easeFactor: number;
   nextReviewDate: string;
   lastReviewedDate: string;
+  tierCyclesCompleted?: number;
+  tier?: KnowledgeTier;
 }
 
 export interface ParsedNotebookCard {
@@ -95,5 +114,7 @@ export interface ParsedNotebookCard {
   typeLabel: string;
   question: string;
   answer: string;
+  tier?: KnowledgeTier;
+  customIntervalDays?: number;
   references?: KnowledgeReference[];
 }
