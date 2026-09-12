@@ -3,14 +3,16 @@ import { ParsedNotebookCard, KnowledgeReference } from '../types';
 import { playSound } from '../lib/audio';
 import { ReferenceManager } from './ReferenceManager';
 import {
-  FileText,
   Sparkles,
   Layers,
-  ArrowRight,
   CheckCircle,
-  HelpCircle,
   Trash2,
   Bookmark,
+  Bot,
+  RefreshCw,
+  AlertCircle,
+  Wand2,
+  Plus,
 } from 'lucide-react';
 
 interface NotebookTabProps {
@@ -24,6 +26,14 @@ interface NotebookTabProps {
     dailyLogTitle: string,
     rawText: string
   ) => void;
+}
+
+interface GeneratedAICard {
+  question: string;
+  answer: string;
+  keyConcept?: string;
+  quote?: string;
+  citation?: string;
 }
 
 export const NotebookTab: React.FC<NotebookTabProps> = ({
@@ -48,8 +58,13 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
   const [dailyLogTitle, setDailyLogTitle] = useState<string>('Notebook Study: Cognitive Science');
   const [references, setReferences] = useState<KnowledgeReference[]>([]);
 
-  // Parser function
-  const parsedCards: ParsedNotebookCard[] = useMemo(() => {
+  // AI Generation States
+  const [isGeneratingAI, setIsGeneratingAI] = useState<boolean>(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiStatusMessage, setAiStatusMessage] = useState<string>('');
+
+  // Parser function for local regex rules
+  const ruleParsedCards: ParsedNotebookCard[] = useMemo(() => {
     if (!rawText.trim()) return [];
 
     const results: ParsedNotebookCard[] = [];
@@ -58,10 +73,8 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
     // 1. Q: and A: Pattern
     const qaRegex = /(?:^|\n)(?:Q|Question):\s*([\s\S]+?)\n(?:A|Answer):\s*([\s\S]+?)(?=(?:\n(?:Q|Question):|$))/gi;
     let match: RegExpExecArray | null;
-    const handledSpans: [number, number][] = [];
 
     while ((match = qaRegex.exec(text)) !== null) {
-      handledSpans.push([match.index, match.index + match[0].length]);
       results.push({
         type: 'qa',
         typeLabel: 'Q & A',
@@ -133,10 +146,10 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
 
   const [editableCards, setEditableCards] = useState<ParsedNotebookCard[]>([]);
 
-  // Sync parsed with editable state
+  // Initialize with rule-parsed cards when rawText changes and not manually overridden
   React.useEffect(() => {
-    setEditableCards(parsedCards);
-  }, [parsedCards]);
+    setEditableCards(ruleParsedCards);
+  }, [ruleParsedCards]);
 
   const handleCardEdit = (index: number, field: 'question' | 'answer', value: string) => {
     setEditableCards((prev) => {
@@ -148,6 +161,93 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
 
   const handleRemoveCard = (index: number) => {
     setEditableCards((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddBlankCard = () => {
+    setEditableCards((prev) => [
+      ...prev,
+      {
+        type: 'custom',
+        typeLabel: 'Custom',
+        question: '',
+        answer: '',
+        references: references.length > 0 ? references : undefined,
+      },
+    ]);
+  };
+
+  // AI Generation with Gemini API
+  const handleGenerateWithAI = async () => {
+    if (!rawText.trim()) {
+      setAiError('Please enter some notes or text in the box above before generating cards with AI.');
+      return;
+    }
+
+    setAiError(null);
+    setIsGeneratingAI(true);
+    setAiStatusMessage('Analyzing study text with Gemini AI...');
+
+    try {
+      // Periodic status update simulation while awaiting server response
+      const statusTimer = setTimeout(() => {
+        setAiStatusMessage('Synthesizing active recall question-answer pairs...');
+      }, 1200);
+
+      const response = await fetch('/api/generate-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: rawText,
+          deckName: deckName.trim() || 'General',
+        }),
+      });
+
+      clearTimeout(statusTimer);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server responded with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      const generatedCards: GeneratedAICard[] = data.cards || [];
+
+      if (generatedCards.length === 0) {
+        throw new Error('Gemini did not find distinct concepts to convert into flashcards. Try adding more detailed text.');
+      }
+
+      // Convert AI cards into ParsedNotebookCard array
+      const newParsedCards: ParsedNotebookCard[] = generatedCards.map((c) => {
+        const cardRefs: KnowledgeReference[] = [...references];
+        if (c.citation || c.quote) {
+          cardRefs.push({
+            id: 'ref_ai_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+            title: c.citation || `${deckName} Reference`,
+            type: 'article',
+            quote: c.quote,
+          });
+        }
+
+        return {
+          type: 'ai',
+          typeLabel: c.keyConcept ? `AI: ${c.keyConcept}` : 'Gemini AI',
+          question: c.question,
+          answer: c.answer,
+          references: cardRefs.length > 0 ? cardRefs : undefined,
+        };
+      });
+
+      // Replace or append
+      setEditableCards(newParsedCards);
+      playSound('flip', soundEnabled);
+      setAiStatusMessage(`Generated ${newParsedCards.length} flashcards using Gemini AI!`);
+    } catch (err: unknown) {
+      console.error('AI Card Generation failed:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to generate flashcards';
+      setAiError(msg);
+    } finally {
+      setIsGeneratingAI(false);
+    }
   };
 
   const handleImport = () => {
@@ -168,18 +268,60 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
     <div className="max-w-7xl mx-auto py-6 px-4 space-y-8">
       {/* Top Description */}
       <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-6 sm:p-8 space-y-6 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
           <div>
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <Layers className="w-5 h-5 text-blue-400" />
-              Paste from Study Notebook &amp; Attach Sources
+              Notebook Flashcard Synthesizer &amp; AI Generator
             </h2>
             <p className="text-xs text-slate-400">
-              Paste raw markdown notes, lecture transcripts, or summaries. Our smart parser converts them into spaced flashcards instantly.
+              Paste raw markdown notes, lecture transcripts, or articles. Use smart rules or the Gemini AI engine to extract high-yield active recall flashcards.
             </p>
           </div>
-          <span className="text-xs font-mono text-slate-400">Smart Syntax Extractor</span>
+
+          {/* AI Generate Cards Button */}
+          <button
+            onClick={handleGenerateWithAI}
+            disabled={isGeneratingAI || !rawText.trim()}
+            className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 text-white text-xs font-bold transition shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 shrink-0 border border-indigo-400/30"
+          >
+            {isGeneratingAI ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                <span>Generating with Gemini...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+                <span>Generate Cards with AI</span>
+              </>
+            )}
+          </button>
         </div>
+
+        {/* AI Loading Banner / Status Message */}
+        {isGeneratingAI && (
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-950/60 to-purple-950/60 border border-blue-500/30 text-blue-200 text-xs flex items-center gap-3 animate-pulse">
+            <Bot className="w-5 h-5 text-blue-400 shrink-0" />
+            <div className="space-y-0.5">
+              <div className="font-semibold text-white">{aiStatusMessage}</div>
+              <div className="text-[11px] text-blue-300">
+                Using Gemini 3.8 Flash to identify core concepts and format atomic Q&amp;A memory cards.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* AI Error Banner */}
+        {aiError && (
+          <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs flex items-start gap-3">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <div className="font-bold text-white">AI Generation Notice</div>
+              <p>{aiError}</p>
+            </div>
+          </div>
+        )}
 
         {/* Syntax Helpers */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
@@ -202,9 +344,9 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
             </p>
           </div>
           <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1">
-            <span className="font-bold text-amber-400">Bullet Points:</span>
+            <span className="font-bold text-amber-400">Gemini AI Parser:</span>
             <p className="text-slate-400 font-mono text-[11px]">
-              - Over 70% of memory fades in 48h.
+              Click &quot;Generate Cards with AI&quot; on any raw text
             </p>
           </div>
         </div>
@@ -213,13 +355,23 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs text-slate-400">
             <label className="font-semibold text-slate-300">Raw Study Notes / Lecture Text</label>
-            <span>{editableCards.length} flashcards detected in real-time</span>
+            <div className="flex items-center gap-3">
+              <span>{editableCards.length} flashcards ready</span>
+              <button
+                onClick={handleGenerateWithAI}
+                disabled={isGeneratingAI || !rawText.trim()}
+                className="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 transition"
+              >
+                <Wand2 className="w-3.5 h-3.5" />
+                <span>AI Extract</span>
+              </button>
+            </div>
           </div>
           <textarea
             rows={8}
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}
-            placeholder="Paste your raw lecture notes, study summaries, or textbook highlights here..."
+            placeholder="Paste your raw lecture notes, study summaries, research highlights, or textbook paragraphs here..."
             className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xs font-mono text-white focus:outline-none focus:border-blue-500 leading-relaxed"
           />
         </div>
@@ -275,26 +427,40 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
 
       {/* Live Interactive Preview Cards */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            Detected Flashcards Preview ({editableCards.length})
-          </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              Suggested Flashcards ({editableCards.length})
+            </h3>
+            <span className="text-xs text-slate-400">Review &amp; edit before importing</span>
+          </div>
 
-          {editableCards.length > 0 && (
+          <div className="flex items-center gap-2.5">
             <button
-              onClick={handleImport}
-              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30 flex items-center gap-2"
+              onClick={handleAddBlankCard}
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition flex items-center gap-1.5"
             >
-              <CheckCircle className="w-4 h-4" />
-              Import All {editableCards.length} Flashcards
+              <Plus className="w-3.5 h-3.5" />
+              Add Blank Card
             </button>
-          )}
+
+            {editableCards.length > 0 && (
+              <button
+                onClick={handleImport}
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30 flex items-center gap-2"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Import All {editableCards.length} Flashcards
+              </button>
+            )}
+          </div>
         </div>
 
         {editableCards.length === 0 ? (
-          <div className="p-12 text-center rounded-3xl bg-slate-900/50 border border-slate-800 text-slate-400 text-xs">
-            No flashcards detected yet. Type or paste notes using the syntax helpers above.
+          <div className="p-12 text-center rounded-3xl bg-slate-900/50 border border-slate-800 text-slate-400 text-xs space-y-3">
+            <Bot className="w-8 h-8 mx-auto text-slate-600" />
+            <p>No flashcards detected yet. Type notes or click &quot;Generate Cards with AI&quot;.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -304,9 +470,19 @@ In long-term potentiation, [glutamate] activates [NMDA receptors] to trigger las
                 className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 shadow-md hover:border-slate-700 transition"
               >
                 <div className="flex items-center justify-between text-xs">
-                  <span className="px-2.5 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold text-[11px]">
-                    {card.typeLabel}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2.5 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold text-[11px] flex items-center gap-1">
+                      {card.type === 'ai' && <Sparkles className="w-3 h-3 text-amber-400" />}
+                      <span>{card.typeLabel}</span>
+                    </span>
+                    {card.references && card.references.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[10px] font-bold flex items-center gap-0.5">
+                        <Bookmark className="w-3 h-3" />
+                        <span>{card.references.length} ref</span>
+                      </span>
+                    )}
+                  </div>
+
                   <button
                     onClick={() => handleRemoveCard(idx)}
                     className="p-1 rounded text-slate-500 hover:text-rose-400 transition"
